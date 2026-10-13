@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Siin0pe/seo-god-mode/security/advisories/new
+    about: Please report security issues privately.
+  - name: Questions and ideas
+    url: https://github.com/Siin0pe/seo-god-mode/discussions
+    about: How-to questions, setups, SEO war stories.

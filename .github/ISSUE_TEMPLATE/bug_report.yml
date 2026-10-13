@@ -1,0 +1,42 @@
+name: Bug report
+description: A script crashed, a number is wrong, or a verdict is misleading
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran or asked, and what you got. Paste the output, with site names and IDs removed if you prefer.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command or script
+      placeholder: "node drop.mjs --vs weeks:4  or  /seo-god-mode:seo quick-wins"
+  - type: textarea
+    id: doctor
+    attributes:
+      label: doctor output
+      description: Output of `/seo-god-mode:seo doctor`, with private details removed.
+      render: text
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      placeholder: "plugin 1.0.0, Node 22.x, Claude Code 2.x, Windows / macOS / Linux"
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: I removed keys, tokens and anything I don't want public from this report.
+          required: true

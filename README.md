@@ -3,6 +3,7 @@
 **Your SEO team, inside Claude Code. It reads your real Google data, tells you what to do this week, and never makes up a number.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)](https://docs.claude.com/en/docs/claude-code/plugins)
+[![CI](https://github.com/Siin0pe/seo-god-mode/actions/workflows/ci.yml/badge.svg)](https://github.com/Siin0pe/seo-god-mode/actions/workflows/ci.yml)
 [![Node 18+](https://img.shields.io/badge/node-18%2B-339933)](https://nodejs.org)
 [![Zero dependencies](https://img.shields.io/badge/dependencies-0-blue)](#how-it-works)
 [![Release](https://img.shields.io/github/v/release/Siin0pe/seo-god-mode)](https://github.com/Siin0pe/seo-god-mode/releases)
@@ -105,6 +106,10 @@ Scripts run on their own too: `node skills/seo/scripts/drop.mjs --vs weeks:4`, `
 - [Claude Code](https://docs.claude.com/en/docs/claude-code)
 - Node.js 18 or newer
 - A site verified in Google Search Console
+
+## Contributing
+
+Bug reports, new data sources and sharper SEO judgment are all welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) (zero dependencies, never invent data, guardrails only get stricter), then open an issue or a PR. Security issues go through [SECURITY.md](SECURITY.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Credits
 

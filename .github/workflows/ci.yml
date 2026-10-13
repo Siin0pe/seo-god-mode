@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Syntax check every script
+        run: for f in plugins/seo-god-mode/skills/seo/scripts/*.mjs; do node --check "$f"; done
+      - name: Every script answers --help
+        working-directory: plugins/seo-god-mode/skills/seo/scripts
+        run: |
+          for f in *.mjs; do
+            [ "$f" = lib.mjs ] && continue
+            node "$f" --help > /dev/null || { echo "--help failed: $f"; exit 1; }
+          done
+      - name: Manifests agree on the version
+        run: node .github/check-manifests.mjs
+      - name: Zero dependencies
+        run: |
+          test ! -e package.json
+          if grep -rhE '^import .* from "' --include=*.mjs plugins/ | grep -vE 'from "(node:|\./)'; then echo "external import found"; exit 1; fi

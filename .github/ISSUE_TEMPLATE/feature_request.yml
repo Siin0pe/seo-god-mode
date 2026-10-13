@@ -1,0 +1,32 @@
+name: Feature request
+description: A new command, data source or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The SEO question you can't answer today
+      description: Start from the question ("which pages lost AI Overview citations?"), not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Command name, data source, what the output looks like.
+  - type: dropdown
+    id: source
+    attributes:
+      label: Data source needed
+      options:
+        - Already connected (Search Console, GA4, PageSpeed)
+        - DataForSEO
+        - Bing / IndexNow
+        - A new source
+        - None (judgment, playbook, docs)
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd like to open the PR myself.
