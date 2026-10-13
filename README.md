@@ -5,6 +5,7 @@
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)](https://docs.claude.com/en/docs/claude-code/plugins)
 [![Node 18+](https://img.shields.io/badge/node-18%2B-339933)](https://nodejs.org)
 [![Zero dependencies](https://img.shields.io/badge/dependencies-0-blue)](#how-it-works)
+[![Release](https://img.shields.io/github/v/release/Siin0pe/seo-god-mode)](https://github.com/Siin0pe/seo-god-mode/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
 Most "AI SEO" tools are a chatbot guessing search volumes from memory. SEO God Mode wires Claude straight into **Search Console, the URL Inspection API, GA4, PageSpeed/CrUX** and, if you want it, **DataForSEO**, then works like a senior SEO who has seen a few hundred traffic drops:
