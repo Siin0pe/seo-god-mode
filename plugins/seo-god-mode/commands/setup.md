@@ -45,4 +45,4 @@ Write them into `.seo/config.json` once the user agrees (or adjusts). Do not inv
 
 ## 5. First look
 
-Run `doctor`, then the "where are we" sequence from the `seo` skill (index → audit → quick-wins → links → cwv) and finish with a short verdict plus at most 3 actions. End with the commands they will use most: `/seo-god-mode:seo weekly`, `drop`, `quick-wins`, `index`.
+Run `doctor`, then the "where are we" sequence from the `seo` skill (index → audit → quick-wins → links → cwv) and finish with a short verdict plus at most 3 actions. End with the commands they will use most: `/seo-god-mode:seo weekly`, `drop`, `quick-wins`, `index`, and offer to put the Monday review on autopilot with `/seo-god-mode:schedule`.

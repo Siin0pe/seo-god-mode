@@ -35,7 +35,10 @@ The user may type `/seo <command>` or just ask. Map the request to one or more o
 | `index` | What is indexed, what isn't and why, the request order for today | `scripts/index-status.mjs` |
 | `links` | Orphans, pages under 5 contextual in-links, which pages to link from and with which anchor | `scripts/internal-links.mjs` |
 | `cwv` | Core Web Vitals field (CrUX) and lab | `scripts/cwv.mjs [url...]` |
-| `gate` | Did this change silently remove something? Run before any publish | `scripts/ship-gate.mjs` |
+| `gate` | Did this change silently remove something? Run before any publish; `--published <url>` after it (live, indexable, in the sitemap) | `scripts/ship-gate.mjs` |
+| `twins` | Pattern pages that are a find-and-replace of each other (doorway risk) | `scripts/twins.mjs [--pattern "^/city/"]` |
+| `serp-mix` | Which queries leave room beyond your site (videos, Reddit, platforms, lists), which subreddits rank, which lists miss you (DataForSEO) | `scripts/serp-mix.mjs` |
+| `rankmap` | Local: top-3% from a rank-map export, weakest direction, cheap wins, gap to the leader | `scripts/rankmap.mjs yours.csv --vs leader.csv` |
 | `keywords` | Volumes, ideas, live SERP, competitor keywords, gaps, backlinks (DataForSEO) | `scripts/keywords.mjs volume\|ideas\|serp\|ranked\|gap\|backlinks` |
 | `suggest` | Free pattern discovery from Google Autocomplete (no volumes) | `scripts/suggest.mjs "<seed>"` |
 | `gsc` | Any ad-hoc Search Console cut, with period comparison | `scripts/gsc.mjs --dims query,page [--compare] [--filter "query~regex"]` |
@@ -55,6 +58,10 @@ For anything that is not a command (a question, an idea, "is X worth it"), answe
 **Young sites (under ~4 weeks of data):** the default windows end 3 days ago and may return nothing. Re-run with `--end <today>` (partial data is fine to see what is appearing) and judge on indexing and impressions, not clicks.
 
 **Domain properties hold several hosts.** `doctor` lists them. When a new site lives next to an established host on the same domain (a portal, an app, a blog), look at that host too (`--host <name>`): its brand demand, the queries it already ranks for, and above all its links to the new site are often the biggest lever, and the new site must not compete with it on its own brand queries.
+
+## Rituals and scheduling
+
+SEO is a loop, not a project: the Monday review (`weekly`) and, on the first Monday of the month, the GEO check (`references/commands.md#geo-monthly`), index coverage and CWV. When the owner sets the skill up, offer to schedule both with `/seo-god-mode:schedule` (it creates the scheduler entry only after the owner says yes). Scheduled runs need the same credentials as interactive ones, so they run on the machine that holds the service account key.
 
 ## Rules of engagement
 

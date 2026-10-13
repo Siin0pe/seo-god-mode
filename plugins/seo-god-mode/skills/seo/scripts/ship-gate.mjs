@@ -5,10 +5,13 @@
 // Usage:
 //   node ship-gate.mjs --before <url|file.html> --after <url|file.html>
 //   node ship-gate.mjs --dist <built-site-dir> [--base https://live.site] [--paths /a/,/b/]   (built output vs live)
+//   node ship-gate.mjs --published <url,url>   after deploy: 200, indexable, self-canonical, listed in the live sitemap
+// The sitemap check matters once an agent publishes outside a CMS: nothing warns you when the sitemap stops
+// listing new pages, and Google quietly stops learning what exists.
 // Exit code: 0 pass, 1 blocking regression (needs explicit owner approval), 3 warnings only.
 import fs from "node:fs";
 import path from "node:path";
-import { parseArgs, loadConfig, fetchText, signature, table, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, fetchText, signature, sitemapUrls, table, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const load = async (src, url) => (/^https?:/.test(src) ? (await fetchText(src)).text : fs.readFileSync(src, "utf8"));
@@ -40,20 +43,46 @@ function compare(a, b, label) {
   return { label, block, warn };
 }
 
+const pathOf = (u) => { try { return new URL(u).pathname; } catch { return u; } };
+const noindex = (sig) => /noindex/i.test(sig.robots);
 let results = [];
-if (args.dist) {
+if (args.published) {
+  const cfg = loadConfig(args);
+  const listed = new Set((await sitemapUrls(cfg.sitemap)).map((u) => pathOf(u.loc)));
+  for (const url of String(args.published).split(",")) {
+    const r = await fetchText(url), block = [], warn = [];
+    if (r.status !== 200) block.push(`HTTP ${r.status}`);
+    else {
+      const sig = signature(r.text, url);
+      if (noindex(sig)) block.push("robots meta says noindex");
+      if (!sig.canonical) warn.push("no canonical tag");
+      else if (pathOf(sig.canonical) !== pathOf(r.url)) block.push(`canonical points elsewhere: ${sig.canonical}`);
+      if (!listed.has(pathOf(url))) block.push(`not listed in the live sitemap (${cfg.sitemap})`);
+      if (/noindex/i.test(r.headers["x-robots-tag"] || "")) block.push("X-Robots-Tag header says noindex");
+    }
+    results.push({ label: url, block, warn });
+  }
+} else if (args.dist) {
   const cfg = args.base ? { site: args.base.replace(/\/$/, "") } : loadConfig(args);
   const files = [];
   const walk = (d) => { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); if (fs.statSync(p).isDirectory()) walk(p); else if (f === "index.html") files.push(p); } };
   walk(args.dist);
   let pathsOnly = args.paths ? String(args.paths).split(",") : null;
+  // Sitemaps produced by the build: every indexable page should be in one of them.
+  const maps = fs.readdirSync(args.dist).filter((f) => /^sitemap.*\.xml$/i.test(f));
+  const built = new Set(maps.flatMap((f) => [...fs.readFileSync(path.join(args.dist, f), "utf8").matchAll(/<loc>\s*([^<\s]+)/gi)].map((m) => m[1])).filter((u) => !/sitemap.*\.xml$/i.test(u)).map(pathOf));
+  if (!maps.length) results.push({ label: "(build)", block: [], warn: ["no sitemap*.xml in the build output: check how the sitemap is generated"] });
   for (const f of files) {
     const rel = "/" + path.relative(args.dist, path.dirname(f)).split(path.sep).join("/");
     const urlPath = rel === "/" ? "/" : rel + "/";
     if (pathsOnly && !pathsOnly.includes(urlPath)) continue;
+    const after = signature(fs.readFileSync(f, "utf8"), cfg.site + urlPath);
+    const inMap = !maps.length || noindex(after) || built.has(urlPath);
     const live = await fetchText(cfg.site + urlPath);
-    if (live.status !== 200) { results.push({ label: urlPath, block: [], warn: [`new page (live ${live.status})`] }); continue; }
-    results.push(compare(signature(live.text, cfg.site + urlPath), signature(fs.readFileSync(f, "utf8"), cfg.site + urlPath), urlPath));
+    if (live.status !== 200) { results.push({ label: urlPath, block: inMap ? [] : ["new page missing from the built sitemap"], warn: [`new page (live ${live.status})`] }); continue; }
+    const r = compare(signature(live.text, cfg.site + urlPath), after, urlPath);
+    if (!inMap) r.warn.push("not in the built sitemap");
+    results.push(r);
   }
 } else {
   if (!args.before || !args.after) throw new Error("need --before and --after, or --dist");
@@ -65,5 +94,6 @@ let md = `## Ship gate — ${results.length} page(s): ${blocked.length} blocked,
 if (blocked.length) md += "### Blocking (do not publish without explicit approval)\n\n" + table(["page", "regressions"], blocked.map((r) => [r.label, r.block.join("; ")])) + "\n\n";
 if (warned.length || blocked.some((r) => r.warn.length)) md += "### Warnings\n\n" + table(["page", "warnings"], results.filter((r) => r.warn.length).map((r) => [r.label, r.warn.join("; ")])) + "\n";
 if (!blocked.length && !warned.length) md += "No regression detected.\n";
+if (args.published) md += "\nPages that pass are live, indexable and in the sitemap: request indexing for them (index-status.mjs gives today's order) and log the change in .seo/log.md.\n";
 emit(args, md, results);
 process.exitCode = blocked.length ? 1 : warned.length ? 3 : 0;

@@ -32,6 +32,7 @@ Talk normally ("why did clicks drop on Tuesday?", "get this page on Google", "wh
 | Command | What you get |
 |---|---|
 | `setup` | Everything connected in one go (`/seo-god-mode:setup`) |
+| `schedule` | Monday review and monthly GEO check on autopilot (`/seo-god-mode:schedule`) |
 | `doctor` | What's plugged in, what's missing, every host on your domain |
 | `weekly` | The Monday review: what moved, why, and 3 actions max |
 | `drop` | Traffic-drop diagnosis: demand vs rank vs CTR, per segment, like-for-like weekdays, mix-effect detection |
@@ -41,7 +42,10 @@ Talk normally ("why did clicks drop on Tuesday?", "get this page on Google", "wh
 | `audit` | Technical issues ranked by severity, hreflang, canonicals, robots.txt policy for AI crawlers |
 | `links` | Orphan pages, pages with too few internal links, where to add links and with which anchor |
 | `prune` | Content inventory: keep, improve or merge. It never deletes anything |
-| `gate` | Before/after check of any page change, exit code 1 blocks the deploy |
+| `gate` | Before/after check of any page change, exit code 1 blocks the deploy; `--published` checks the live page is indexable and in the sitemap |
+| `twins` | Doorway detector: pattern pages that are a find-and-replace of each other |
+| `serp-mix` | Which queries leave room beyond your site (videos, Reddit, LinkedIn, lists), which subreddits Google ranks on your keywords, which lists miss you |
+| `rankmap` | Local SEO: top-3% from a rank-map export, weakest direction, cheap wins, gap to the leader |
 | `cwv` | Core Web Vitals, field (CrUX) and lab |
 | `keywords` | Volumes, ideas, live SERPs with AI Overviews, competitor keywords, gaps, backlinks (DataForSEO) |
 | `suggest` | Free keyword patterns from Google Autocomplete |
@@ -90,10 +94,10 @@ Google access goes through a **service account** you create (5 minutes, free). T
 
 ```
 plugins/seo-god-mode/
-├── commands/setup.md          /seo-god-mode:setup
+├── commands/                  /seo-god-mode:setup, /seo-god-mode:schedule
 └── skills/seo/
     ├── SKILL.md               how Claude runs the job: commands, rules, judgment
-    ├── scripts/               18 Node scripts, zero dependencies, markdown or --json output
+    ├── scripts/               21 Node scripts, zero dependencies, markdown or --json output
     └── references/            playbook, Google spam policies with links, GEO research, setup
 ```
 
