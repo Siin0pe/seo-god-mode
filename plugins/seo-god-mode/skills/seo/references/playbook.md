@@ -59,6 +59,8 @@ Profile shape matters: natural anchors (brand, URL, "here") from outside, mixed 
 
 See `geo.md`. In short: assistants search the web with short fan-out queries ("best X year", "X review", "X alternative") and cite pages that rank for them, especially third-party lists and communities. Be on those pages; keep your own facts current; measure by hand monthly.
 
+**Occupy the SERP.** On a money query your domain gets one or two listings at most, and no amount of SEO buys a third. Your brand can take more: one video per keyword (YouTube ranks inside Google; title shape for reviews: "{Tool} Review {Year}: Features, Pricing & Alternatives"; a 200+ word description answering the query in its first two lines), three Shorts per video for three queries (reused on TikTok with captions written for TikTok search), a LinkedIn or X post whose first line is the exact query, a disclosed comment in the thread you will never outrank, a place in other people's lists. `serp-mix.mjs` ranks queries by how many of these open slots the first page already shows: prioritise those. Social networks: the niche picks them (software: X, YouTube, GitHub, Reddit; B2B services: LinkedIn; consumer: Instagram, TikTok), three or four at most. Wikipedia: never ask; build enough presence that someone else decides you belong. A video that reads as an ad fails: someone searching a competitor's name wants a verdict, including where the competitor wins.
+
 ## 7. The loop
 
 - **Monday (≈10 minutes when healthy):** `weekly.mjs`, read it, 3 actions max. Do not touch pages changed in the last 60 days.

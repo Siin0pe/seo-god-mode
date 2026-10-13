@@ -4,8 +4,16 @@ All notable changes to SEO God Mode are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-13
+
 ### Added
 
+- **`twins`**: doorway detector. Measures how much pages of one pattern share (5-word shingles of the main content), flags 80%+ as doorway risk (exit 1) and 60%+ as thin variants, and counts what each page says that no sibling says.
+- **`serp-mix`** (DataForSEO): occupy the SERP. Ranks queries by open slots beyond your own site (videos, Reddit and forums, platforms, third-party lists), lists the subreddits Google ranks on your keywords, the videos ranking and the lists that don't mention you. Cached per query and day.
+- **`rankmap`**: local SEO from a rank-map export. Top-3%, strongest and weakest direction, cheap wins in positions 4-6, gap to the leaders with the 25% / 50% decision rule.
+- **`ship-gate --published`**: after deploy, checks the page answers 200, is indexable, self-canonical and listed in the live sitemap. `--dist` now also checks the built sitemap lists every new indexable page.
+- **`/seo-god-mode:schedule`**: puts the Monday review and the monthly GEO check on the system scheduler (Task Scheduler or cron), after the owner's yes.
+- Playbook: occupying the SERP (videos, Shorts, posts, threads, lists), the Reddit method, ranking swaps and the placement ladder, outreach cadence, the five checks before a paid link, backlink profile anomalies, link decay, and the full local system (profile numbers, the seven home page checks, the Core 30, the rank-map decision rule).
 - Contributing guide, code of conduct, security policy, issue and PR templates, CI (syntax, `--help`, manifest versions, zero dependencies on Node 18 and 22).
 
 ## [1.0.0] - 2026-10-13
@@ -34,4 +42,6 @@ First public release.
 - Guardrails: read-only by default, owner approval for anything that touches a live page, never deletes pages, buys, emails, submits forms, creates accounts or handles credentials.
 - Per-project memory in `.seo/`: `standards.md` (grows from rejected proposals) and `log.md` (every change with its review date).
 
+[Unreleased]: https://github.com/Siin0pe/seo-god-mode/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Siin0pe/seo-god-mode/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Siin0pe/seo-god-mode/releases/tag/v1.0.0
