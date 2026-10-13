@@ -1,0 +1,13 @@
+{
+  "name": "seo-god-mode",
+  "version": "1.0.0",
+  "description": "Turn Claude into your SEO team. Plugs into your real Search Console, GA4, PageSpeed and (optionally) DataForSEO data, then finds quick wins, explains traffic drops, drives indexing, gates every page change and writes your weekly SEO review. 18 zero-dependency scripts, one setup command, zero invented numbers.",
+  "author": {
+    "name": "Armand",
+    "url": "https://github.com/Siin0pe"
+  },
+  "homepage": "https://github.com/Siin0pe/seo-god-mode",
+  "repository": "https://github.com/Siin0pe/seo-god-mode",
+  "license": "MIT",
+  "keywords": ["seo", "google-search-console", "ga4", "pagespeed", "core-web-vitals", "dataforseo", "indexing", "geo", "ai-search", "keywords", "internal-links", "weekly-report"]
+}
