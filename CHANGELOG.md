@@ -2,6 +2,12 @@
 
 All notable changes to SEO God Mode are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Contributing guide, code of conduct, security policy, issue and PR templates, CI (syntax, `--help`, manifest versions, zero dependencies on Node 18 and 22).
+
 ## [1.0.0] - 2026-10-13
 
 First public release.
