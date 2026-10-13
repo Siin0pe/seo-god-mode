@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "seo-god-mode",
+  "owner": {
+    "name": "Armand",
+    "email": "84010455+Siin0pe@users.noreply.github.com"
+  },
+  "metadata": {
+    "description": "SEO God Mode: the SEO team that lives in your terminal. Real Google data in, ranked actions out.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "seo-god-mode",
+      "source": "./plugins/seo-god-mode",
+      "description": "Turn Claude into your SEO team: real Search Console, GA4, PageSpeed and DataForSEO data, quick wins, traffic-drop diagnosis, indexing, page gates, GEO and a weekly review. One command to set up.",
+      "version": "1.0.0",
+      "category": "marketing",
+      "tags": ["seo", "search-console", "ga4", "core-web-vitals", "dataforseo", "geo", "ai-search", "skill"],
+      "strict": false
+    }
+  ]
+}
