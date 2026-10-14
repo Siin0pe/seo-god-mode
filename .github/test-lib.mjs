@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { unmangleMsys, msysRoots, parseArgs, parseRobots, rootAllowed, robotsMatch, onHost, hostPattern, regDomainOf, urlKey, signature } from "../plugins/seo-god-mode/skills/seo/scripts/lib.mjs";
+import { unmangleMsys, msysRoots, parseArgs, parseRobots, rootAllowed, robotsMatch, onHost, hostPattern, regDomainOf, urlKey, signature, period, previousWindow, ctrCurve, expectedCtr, DEFAULT_CTR, delta, signed, gateCompare, pruneAction, contentWords, shingles, jaccard } from "../plugins/seo-god-mode/skills/seo/scripts/lib.mjs";
 
 const scripts = path.join(path.dirname(fileURLToPath(import.meta.url)), "../plugins/seo-god-mode/skills/seo/scripts");
 
@@ -65,6 +65,45 @@ assert.equal(urlKey("https://example.com/"), "https://example.com/");
 // Signature: relative links are internal when the page URL is known.
 const sig = signature('<html lang="en"><head><link rel="canonical" href="https://x.test/p/"></head><body><main><a href="/a/">a</a><a href="https://other.test/">b</a></main></body></html>', "https://x.test/p/");
 assert.equal(sig.internalLinks, 1);
+
+// Date windows: days is the real length, also with --start; the previous window touches but never overlaps.
+assert.deepEqual(period({ start: "2026-09-01", end: "2026-09-28" }), { start: "2026-09-01", end: "2026-09-28", days: 28 });
+assert.equal(period({ end: "2026-09-28", days: 7 }).start, "2026-09-22");
+assert.deepEqual(previousWindow({ start: "2026-09-01", end: "2026-09-28" }), { start: "2026-08-04", end: "2026-08-31", days: 28 });
+
+// CTR curve: the site's own CTR only where a position has enough impressions.
+const curve = ctrCurve([{ position: 1, clicks: 300, impressions: 1000 }, { position: 2, clicks: 1, impressions: 10 }]);
+assert.equal(curve[1], 0.3);
+assert.equal(curve[2], DEFAULT_CTR[2]);
+assert.equal(expectedCtr(curve, 0.4), 0.3);
+assert.equal(expectedCtr(curve, 57), DEFAULT_CTR[20]);
+assert.equal(delta(0, 0), 0);
+assert.equal(signed(delta(5, 0)), "new");
+
+// Gate rules on signatures.
+const base = signature(`<html lang="en"><head><title>T</title><link rel="canonical" href="https://x.test/p/"><script type="application/ld+json">{"@type":"FAQPage"}</script></head><body><main><h1>H</h1><p>${"w ".repeat(400)}</p><table></table></main></body></html>`, "https://x.test/p/");
+assert.deepEqual(gateCompare(base, base, "same").block, []);
+const thin = signature(`<html lang="en"><head><title>T</title><link rel="canonical" href="https://x.test/p/"></head><body><main><h1>H</h1><p>${"w ".repeat(100)}</p></main></body></html>`, "https://x.test/p/");
+const g = gateCompare(base, thin, "thin");
+assert.ok(g.block.some((b) => b.startsWith("table")));
+assert.ok(g.block.some((b) => b.includes("FAQPage")));
+assert.ok(g.block.some((b) => b.startsWith("words")));
+
+// Prune: the 600-word deletion veto, and pages of unknown age are flagged, not "too young" forever.
+const page0 = { status: 200, noindex: false, young: false, seen: "2025-01-01", clicks: 0, impressions: 0, position: null, minImpr: 50 };
+assert.match(pruneAction({ ...page0, words: 900 }), /deletion vetoed/);
+assert.match(pruneAction({ ...page0, words: 200 }), /^merge/);
+assert.match(pruneAction({ ...page0, words: 200, seen: null }), /^check/);
+assert.match(pruneAction({ ...page0, words: 200, young: true }), /^too young/);
+assert.match(pruneAction({ ...page0, words: 200, clicks: 3, position: 14 }), /^improve \(has demand/);
+assert.match(pruneAction({ ...page0, status: 404 }), /^fix: HTTP 404/);
+
+// Twins: accents folded, a find-and-replace page scores high, different text low.
+assert.deepEqual(contentWords("<main><p>Réseau électrique</p></main>"), ["reseau", "electrique"]);
+const body = "we install and repair heat pumps for homes and small offices with a ten year warranty on parts and labour";
+const sa = shingles(contentWords(`<main>${body} in austin</main>`)), sb = shingles(contentWords(`<main>${body} in dallas</main>`));
+assert.ok(jaccard(sa, sb) >= 0.8);
+assert.ok(jaccard(sa, shingles(contentWords("<main>a completely different page about something else entirely with many other words</main>"))) < 0.1);
 
 // Ship gate, end to end on files.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "seo-gate-"));

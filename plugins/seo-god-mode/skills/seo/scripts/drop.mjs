@@ -5,13 +5,17 @@
 //   --vs prev    : previous period of equal length (default)
 //   --vs weeks:4 : same weekdays 4 weeks earlier (avoids holiday overlap with the previous week)
 //   --vs year    : same weekdays 52 weeks earlier (seasonality check)
-import { parseArgs, loadConfig, gsc, gscObjects, ga4, period, addDays, lastFinalDay, queryClass, table, fmt, pct, signed, delta, short, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, gsc, gscObjects, ga4, period, addDays, lastFinalDay, queryClass, table, fmt, pct, signed, delta, short, emit, die } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
 const cur = period(args, 7);
 const vs = String(args.vs || "prev");
-const shiftDays = vs === "year" ? 364 : vs.startsWith("weeks:") ? 7 * Number(vs.split(":")[1]) : cur.days % 7 === 0 ? cur.days : Math.ceil(cur.days / 7) * 7;
+const weeks = vs.startsWith("weeks:") ? Number(vs.split(":")[1]) : null;
+if (vs !== "prev" && vs !== "year" && !(Number.isInteger(weeks) && weeks >= 1)) die(`Bad --vs "${vs}": use prev, year or weeks:N (N ≥ 1).`);
+const shiftDays = vs === "year" ? 364 : weeks ? 7 * weeks : Math.ceil(cur.days / 7) * 7;
+// A reference window that overlaps the current one compares the period with itself.
+if (shiftDays < cur.days) die(`--vs ${vs} shifts by ${shiftDays} days but the window is ${cur.days} days long: the periods would overlap. Use a larger N or a shorter window.`);
 const ref = { start: addDays(cur.start, -shiftDays), end: addDays(cur.end, -shiftDays) };
 const segs = String(args.by || "class,country,page,device").split(",");
 

@@ -3,15 +3,14 @@
 // keep / improve / merge-or-redirect candidate / too young. It never deletes anything: deletion is an owner
 // decision, and pages of 600+ words are never proposed for deletion by this script (veto in code, not prompt).
 // Usage: node prune.mjs [--days 90] [--min-impr 50] [--young 90] [--json]
-import { parseArgs, loadConfig, gsc, gscObjects, period, addDays, today, sitemapUrls, fetchText, signature, pool, urlKey, table, fmt, short, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, gsc, gscObjects, period, addDays, today, sitemapUrls, requireSitemap, fetchText, signature, pool, urlKey, pruneAction, table, fmt, short, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
-if (!cfg.sitemap) throw new Error('"sitemap" missing in config');
 const win = period(args, Number(args.days || 90));
 const minImpr = Number(args["min-impr"] || 50);
 const youngDays = Number(args.young || 90);
-const urls = await sitemapUrls(cfg.sitemap);
+const urls = await sitemapUrls(requireSitemap(cfg));
 // Matched on urlKey(): a trailing-slash or host-case difference between the sitemap and Search Console must not
 // turn a page with traffic into a zero-traffic merge candidate.
 const perf = new Map();
@@ -35,14 +34,7 @@ const rows = pages.map((p) => {
   const young = !!seen && seen > cutoff;
   const words = p.sig?.words ?? 0;
   const noindex = /noindex/i.test(p.sig?.robots || "");
-  let action;
-  if (p.status !== 200) action = `fix: HTTP ${p.status} in sitemap`;
-  else if (noindex) action = "fix: noindex page listed in sitemap";
-  else if (young) action = "too young: leave it";
-  else if (!seen) action = "check: no impression in 16 months and no lastmod (confirm the publish date)";
-  else if (g.clicks > 0 || g.impressions >= minImpr) action = g.position && g.position > 10 ? "improve (has demand, ranks deep)" : "keep";
-  else if (words >= 600) action = "improve or merge (substantial page: deletion vetoed)";
-  else action = "merge/redirect or rewrite candidate (owner decides)";
+  const action = pruneAction({ status: p.status, noindex, young, seen, clicks: g.clicks, impressions: g.impressions, position: g.position, words, minImpr });
   return { url: p.url, clicks: g.clicks, impressions: g.impressions, position: g.position, firstSeen: seen, words, inlinks: inlinks.get(urlKey(p.url)) || 0, action };
 });
 const order = (a) => (a.startsWith("fix") ? 0 : a.startsWith("merge") ? 1 : a.startsWith("improve or") ? 2 : a.startsWith("check") ? 3 : a.startsWith("improve") ? 4 : a.startsWith("too") ? 5 : 6);

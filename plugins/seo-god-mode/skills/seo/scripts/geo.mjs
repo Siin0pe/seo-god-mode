@@ -9,7 +9,7 @@
 //   report                        cited share per engine and per month from .seo/geo-log.jsonl
 import fs from "node:fs";
 import path from "node:path";
-import { parseArgs, loadConfig, dataforseo, dataforseoAuth, onHost, table, today, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, dataforseo, dataforseoAuth, onHost, table, today, emit, die } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
@@ -43,7 +43,7 @@ if (cmd === "queries") {
   emit(args, `## GEO prospects — pages ranking for fan-out queries (cost $${cost.toFixed(4)})\n\nListicles and comparisons by third parties are the placements to earn (ask to be added when the list is recent, ranks, and already includes a competitor). Your own pages ranking here are what keeps you citable.\n\n` + table(["query", "rank", "domain", "title", "url", "who"], rows), rows);
 } else if (cmd === "log") {
   const e = { date: today(), engine: args.engine, prompt: args.prompt, cited: String(args.cited).startsWith("y"), sources: args.sources ? String(args.sources).split(",") : [], note: args.note || "" };
-  if (!e.engine || !e.prompt) throw new Error("need --engine and --prompt");
+  if (!e.engine || !e.prompt) die('need --engine and --prompt, e.g. geo.mjs log --engine chatgpt --prompt "best crm for plumbers" --cited no');
   fs.appendFileSync(logFile, JSON.stringify(e) + "\n");
   console.log("logged to " + logFile);
 } else if (cmd === "report") {

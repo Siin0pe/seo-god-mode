@@ -11,8 +11,7 @@
 import { parseArgs, loadConfig, dataforseo, table, fmt, emit } from "./lib.mjs";
 
 const args = parseArgs();
-let cfg = {};
-try { cfg = loadConfig(args); } catch {}
+const cfg = loadConfig(args, { optional: true });
 const [cmd, ...rest] = args._;
 const location_code = Number(args.location || cfg.market?.location || 2840);
 const language_code = args.lang || cfg.market?.language || "en";

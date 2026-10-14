@@ -2,12 +2,12 @@
 // in-link floor, and for each weak page the best source pages to link FROM, chosen with Search Console data
 // (pages that already get impressions for the target's queries are topically closest) plus the anchor to use.
 // Usage: node internal-links.mjs [--min 5] [--days 90] [--limit 25] [--json]
-import { parseArgs, loadConfig, sitemapUrls, fetchText, signature, pool, gsc, gscObjects, period, queryClass, urlKey, table, short, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, sitemapUrls, requireSitemap, fetchText, signature, pool, gsc, gscObjects, period, queryClass, urlKey, table, short, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
 const floor = Number(args.min || 5);
-const urls = (await sitemapUrls(cfg.sitemap)).map((u) => u.loc);
+const urls = (await sitemapUrls(requireSitemap(cfg))).map((u) => u.loc);
 // Links, sitemap and Search Console are matched on urlKey(): "/a" linked as "/a/" is still a link to the page.
 const byKey = new Map(urls.map((u) => [urlKey(u), u]));
 const set = new Set(urls);
