@@ -254,6 +254,63 @@ export async function pagespeed(cfg, url, strategy = "mobile") {
   };
 }
 
+/** CrUX History API: weekly p75 of the 28 days before each week, up to 40 weeks, for a URL or an origin.
+ *  Needs an API key with the Chrome UX Report API enabled (CRUX_API_KEY, or the PageSpeed key).
+ *  Returns { weeks: ["YYYY-MM-DD" (period end)...], p75: { lcp, inp, cls, ttfb }: arrays aligned on weeks, null = no data }. */
+export const cruxKey = (cfg) => process.env.CRUX_API_KEY || pagespeedKey(cfg);
+const CRUX_METRICS = { lcp: "largest_contentful_paint", inp: "interaction_to_next_paint", cls: "cumulative_layout_shift", ttfb: "experimental_time_to_first_byte" };
+export async function cruxHistory(cfg, target, { origin = false, formFactor = "PHONE", weeks = 40 } = {}) {
+  const key = cruxKey(cfg);
+  if (!key) missing("CrUX API key", "Enable the Chrome UX Report API on the Google Cloud project and set CRUX_API_KEY (the PageSpeed key works if that API is enabled on it).");
+  const body = { ...(origin ? { origin: new URL(target).origin } : { url: target }), formFactor, metrics: Object.values(CRUX_METRICS), collectionPeriodCount: weeks };
+  const j = await apiJson("https://chromeuxreport.googleapis.com/v1/records:queryHistoryRecord?key=" + encodeURIComponent(key), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (j.error) return { target, error: j.error.code === 404 ? "no CrUX data (not enough Chrome traffic)" : j.error.message };
+  const d = (x) => `${x.year}-${String(x.month).padStart(2, "0")}-${String(x.day).padStart(2, "0")}`;
+  const num = (v) => (v == null || v === "NaN" ? null : Number(v)); // CLS comes as a string
+  const p75 = Object.fromEntries(Object.entries(CRUX_METRICS).map(([k, m]) => [k, (j.record?.metrics?.[m]?.percentilesTimeseries?.p75s || []).map(num)]));
+  return { target, weeks: (j.record?.collectionPeriods || []).map((p) => d(p.lastDate)), p75 };
+}
+export const CWV_GOOD = { lcp: 2500, inp: 200, cls: 0.1, ttfb: 800 };
+/** Per metric: latest p75, 4 and 12 weeks earlier, and the last week it crossed the "good" threshold. */
+export function cwvTrend({ weeks, p75 }) {
+  const out = {};
+  for (const [k, s] of Object.entries(p75)) {
+    const at = (back) => { const i = s.length - 1 - back; return i >= 0 ? s[i] : null; };
+    let crossed = null;
+    for (let i = 1; i < s.length; i++) {
+      if (s[i] == null || s[i - 1] == null) continue;
+      const was = s[i - 1] <= CWV_GOOD[k], is = s[i] <= CWV_GOOD[k];
+      if (was !== is) crossed = { week: weeks[i], to: is ? "good" : "not good" };
+    }
+    out[k] = { latest: at(0), w4: at(4), w12: at(12), crossed };
+  }
+  return out;
+}
+
+// ---------- Search Console sitemaps ----------
+/** What Google knows about the property's sitemaps: last read, errors, pending. Read-only scope is enough. */
+export async function gscSitemaps(cfg) {
+  if (!cfg.gscProperty) missing("Search Console property", 'Set "gscProperty" in .seo/config.json.');
+  const token = await googleToken(cfg, GSC_SCOPE);
+  const j = await apiJson(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(cfg.gscProperty)}/sitemaps`, { headers: { Authorization: "Bearer " + token } });
+  if (j.error) return { error: j.error.message };
+  // Counts are int64, serialised as strings.
+  return { sitemaps: (j.sitemap || []).map((s) => ({ path: s.path, lastSubmitted: s.lastSubmitted, lastDownloaded: s.lastDownloaded, pending: !!s.isPending, index: !!s.isSitemapsIndex, errors: Number(s.errors || 0), warnings: Number(s.warnings || 0), submitted: (s.contents || []).reduce((n, c) => n + Number(c.submitted || 0), 0) })) };
+}
+/** Problems worth a line in doctor / index: configured sitemap unknown to Google, not read for 14+ days, errors. */
+export function sitemapIssues(sitemaps, configured, now = new Date()) {
+  const out = [];
+  const known = sitemaps.map((s) => s.path);
+  if (configured && !known.includes(configured)) out.push(`${configured} is not submitted in Search Console (submit it there, or check the exact URL)`);
+  for (const s of sitemaps) {
+    const age = s.lastDownloaded ? Math.floor((now - new Date(s.lastDownloaded)) / 86400000) : null;
+    if (s.errors) out.push(`${s.path}: ${s.errors} error(s) reported by Google`);
+    if (age == null && !s.pending) out.push(`${s.path}: never downloaded by Google`);
+    else if (age != null && age > 14) out.push(`${s.path}: last read by Google ${age} days ago`);
+  }
+  return out;
+}
+
 // ---------- DataForSEO (optional, paid per request) ----------
 export function dataforseoAuth() {
   const l = process.env.DATAFORSEO_LOGIN, p = process.env.DATAFORSEO_PASSWORD;

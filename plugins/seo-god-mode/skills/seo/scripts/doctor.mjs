@@ -1,7 +1,7 @@
 // Checks every data source the skill can use and prints what is connected, what is missing and how to fix it.
 // Usage: node doctor.mjs [--config path]
 import fs from "node:fs";
-import { loadConfig, parseArgs, serviceAccountKeyPath, googleToken, apiJson, pagespeedKey, dataforseoAuth, fetchText, lastFinalDay, addDays } from "./lib.mjs";
+import { loadConfig, parseArgs, serviceAccountKeyPath, googleToken, apiJson, pagespeedKey, cruxKey, cruxHistory, gscSitemaps, sitemapIssues, dataforseoAuth, fetchText, lastFinalDay, addDays } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
@@ -32,6 +32,10 @@ async function tryGsc() {
   }
   const ins = await apiJson("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ inspectionUrl: cfg.site + "/", siteUrl: cfg.gscProperty }) });
   line(!ins.error, "URL Inspection API", ins.error ? ins.error.message : `home: ${ins.inspectionResult?.indexStatusResult?.coverageState} (quota 2,000/day/property)`);
+  const sm = await gscSitemaps(cfg);
+  if (sm.error) return line(false, "Sitemaps (Google)", sm.error);
+  const issues = sitemapIssues(sm.sitemaps, cfg.sitemap);
+  line(!issues.length, "Sitemaps (Google)", sm.sitemaps.length ? `${sm.sitemaps.length} submitted${issues.length ? ": " + issues.join("; ") : ", all read in the last 14 days, no errors"}` : "none submitted in Search Console");
 }
 async function tryGa4() {
   if (!cfg.ga4Property) return line(null, "GA4", 'not configured (optional): "ga4Property"');
@@ -43,6 +47,9 @@ async function tryGa4() {
 async function tryPsi() {
   const k = pagespeedKey(cfg);
   line(k ? true : null, "PageSpeed / CrUX", k ? "API key found" : "no key: works unauthenticated but rate-limited; set PAGESPEED_API_KEY");
+  if (!cruxKey(cfg)) return line(null, "CrUX History", "needs an API key with the Chrome UX Report API enabled (CRUX_API_KEY or the PageSpeed key)");
+  const h = await cruxHistory(cfg, cfg.site, { origin: true, weeks: 1 });
+  line(h.error ? (/no CrUX data/.test(h.error) ? null : false) : true, "CrUX History", h.error ? h.error + (/not enabled|has not been used|disabled/i.test(h.error) ? " (enable https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com)" : "") : `origin data up to ${h.weeks.at(-1)} (cwv.mjs --history)`);
 }
 async function trySite() {
   const s = await fetchText(cfg.site + "/robots.txt");

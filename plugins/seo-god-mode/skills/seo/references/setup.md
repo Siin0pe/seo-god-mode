@@ -39,6 +39,10 @@ Quotas: Search Analytics is generous (row pagination at 25,000); URL Inspection 
 
 Works without a key but is rate-limited. Create an API key restricted to the PageSpeed Insights API and set `PAGESPEED_API_KEY`. Field data only exists for URLs and origins with enough Chrome traffic.
 
+**CrUX History** (`cwv.mjs --history`, the trend line in `weekly`): up to 40 weekly p75 points per URL and origin, so a regression has a date. Enable the **Chrome UX Report API** (https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com) on the same project and allow it on the key, or create a separate key and set `CRUX_API_KEY`. Free, 150 queries/minute per project.
+
+**Sitemaps in Search Console**: `doctor` and `index` read which sitemaps Google knows, when it last downloaded them and their errors, through the same service account (no extra setup).
+
 ## DataForSEO (optional, recommended for keyword work)
 
 Pay-as-you-go API that supplies what Search Console can't: volumes, keyword ideas and difficulty, live SERPs (with AI Overview and other features), competitors' ranked keywords, domain gaps, backlinks (separate subscription). Minimum deposit around $50; a live SERP costs fractions of a cent. Set `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` (API credentials, not the account password) in the environment, not in the config. There is also an official DataForSEO MCP server if you prefer tools over scripts.
