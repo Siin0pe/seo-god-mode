@@ -1,7 +1,7 @@
 // Checks every data source the skill can use and prints what is connected, what is missing and how to fix it.
 // Usage: node doctor.mjs [--config path]
 import fs from "node:fs";
-import { loadConfig, parseArgs, serviceAccountKeyPath, googleToken, apiJson, pagespeedKey, cruxKey, cruxHistory, gscSitemaps, sitemapIssues, dataforseoAuth, fetchText, lastFinalDay, addDays } from "./lib.mjs";
+import { loadConfig, parseArgs, serviceAccountKeyPath, googleToken, apiJson, pagespeedKey, cruxKey, cruxHistory, gscSitemaps, sitemapIssues, dataforseoAuth, fetchText, lastFinalDay, addDays, cloudflareGraphql } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
@@ -63,6 +63,13 @@ async function tryOptional() {
   const ik = process.env.INDEXNOW_KEY || cfg.indexNowKey;
   if (ik) { const f = await fetchText(`${cfg.site}/${ik}.txt`); line(f.status === 200 && f.text.trim() === ik, "IndexNow", f.status === 200 ? "key file served" : `key file ${cfg.site}/${ik}.txt → ${f.status}`); }
   else line(null, "IndexNow", "not configured (optional): INDEXNOW_KEY + key file at site root");
+  const zone = cfg.cloudflare?.zoneId || process.env.CLOUDFLARE_ZONE_ID;
+  if (!zone) line(null, "Crawler visits", 'not configured (optional): config "cloudflare": {"zoneId"} + CLOUDFLARE_API_TOKEN, or crawlers.mjs --file <logs>');
+  else if (!process.env.CLOUDFLARE_API_TOKEN) line(false, "Crawler visits", `zone ${zone} configured but CLOUDFLARE_API_TOKEN is not set`);
+  else {
+    const d = await cloudflareGraphql("query($z: String!) { viewer { zones(filter: { zoneTag: $z }) { zoneTag } } }", { z: zone });
+    line(d?.viewer?.zones?.length ? true : false, "Crawler visits", d?.viewer?.zones?.length ? `Cloudflare zone ${zone} readable (crawlers.mjs)` : `the token cannot read zone ${zone}: give it Account Analytics: Read on that zone`);
+  }
 }
 // One failing source (no key, API error) must not hide the state of the others.
 for (const [name, f] of [["Search Console", tryGsc], ["GA4", tryGa4], ["PageSpeed / CrUX", tryPsi], ["Site", trySite], ["Optional sources", tryOptional]]) { try { await f(); } catch (e) { line(false, name, String(e.message || e).split("\n")[0]); } }

@@ -45,6 +45,7 @@ The user may type `/seo-god-mode:seo <command>` or just ask. Map the request to 
 | `gsc` | Any ad-hoc Search Console cut, with period comparison | `scripts/gsc.mjs --dims query,page [--compare] [--filter "query~regex"]` |
 | `bing` | Bing queries / pages | `scripts/bing.mjs queries\|pages` |
 | `indexnow` | Ping Bing & co. after publishing | `scripts/indexnow.mjs <url...>` |
+| `crawlers` | Which search and AI crawlers actually fetch the site, what, and with which status; sitemap pages Googlebot skipped | `scripts/crawlers.mjs [--sitemap]` (Cloudflare) or `--file <logs>` |
 | `pattern` | Money keywords and repeatable page patterns | procedure in `references/commands.md#pattern` |
 | `brief` | One page, one keyword: what to build and what makes it better than the top 3 | `references/commands.md#brief` |
 | `ship` | Publish a page or a change safely | `references/commands.md#ship` |

@@ -20,7 +20,7 @@ Sources: ahrefs.com/blog/query-fan-out-chatgpt · airops.com/report/influence-of
 
 ## Levers, in order
 
-1. The pages exist, are indexed, crawlable by retrieval bots (`audit.mjs` reports the robots.txt AI policy: blocking OAI-SearchBot, ChatGPT-User, PerplexityBot, Claude-SearchBot prevents live citation; blocking training bots like GPTBot does not).
+1. The pages exist, are indexed, crawlable by retrieval bots (`audit.mjs` reports the robots.txt AI policy: blocking OAI-SearchBot, ChatGPT-User, PerplexityBot, Claude-SearchBot prevents live citation; blocking training bots like GPTBot does not). Allowed is not visited: `crawlers.mjs` shows whether those crawlers actually fetch the pages.
 2. Facts about the business are current and in plain text on its own pages (prices, features, locations, dates).
 3. Rank for the fan-out shapes ("best X year", "X review", "X alternative") with honest pages.
 4. Be listed in third-party rankings and comparisons that rank for those shapes (outreach; ranking swaps between businesses that genuinely belong together; refresh yearly).

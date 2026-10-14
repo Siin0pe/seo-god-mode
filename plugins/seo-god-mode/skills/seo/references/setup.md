@@ -52,6 +52,13 @@ Pay-as-you-go API that supplies what Search Console can't: volumes, keyword idea
 - Bing Webmaster Tools: verify the site (it can import from Search Console). Its API key (`BING_WMT_API_KEY`) gives Bing query data, which matters because some assistants retrieve through Bing.
 - IndexNow: generate a 32-hex key, serve it as `/<key>.txt` at the site root (a shipped file: owner approval), set `INDEXNOW_KEY`; then `indexnow.mjs <urls>` after each publish. Not used by Google.
 
+## Crawler visits (optional): Cloudflare or log files
+
+`crawlers.mjs` shows which search and AI crawlers actually fetch the site, what they fetch and the status they get.
+
+- **Site behind Cloudflare** (orange cloud): create an API token with **Account → Account Analytics → Read**, zone resources limited to the site's zone, and set `CLOUDFLARE_API_TOKEN`. Add `"cloudflare": {"zoneId": "<zone id>"}` to `.seo/config.json` (Zone ID is on the zone's Overview page). 30 days of history on every plan; crawlers are identified by user agent (verified-bot detection needs Bot Management).
+- **Anywhere else** (Vercel, a VPS, any host): pass log files, `crawlers.mjs --file <file> [--file …]`, `.gz` accepted. Formats: Vercel Log Drain JSON/NDJSON (`proxy.path`, `proxy.userAgent`, `proxy.statusCode`), generic JSON logs (`userAgent`, `path`, `status`, `timestamp`), and the combined access-log format (nginx, Apache). On Vercel, full request logs only exist through a Log Drain (Pro or Enterprise) to an endpoint you store; the runtime-logs API keeps at most a day and has no user agent.
+
 ## Optional MCP servers
 
 The scripts cover the core. MCPs are interchangeable sources when present:
