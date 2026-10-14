@@ -20,6 +20,8 @@
 | `keyEvents` | GA4 event names that mean business (signup, purchase, tool_run) |
 | `market` | DataForSEO defaults `{"location": 2840, "language": "en"}` (2826 UK, 2250 FR, 2276 DE, 2784 AE, 2392 JP, 2364 IR) |
 | `credentials.serviceAccountKey` | path to the Google service account JSON key (a path, never the key itself) |
+| `credentials.gbpOAuth` | path to the Business Profile OAuth file written by `gbp-auth.mjs` (or set `GBP_OAUTH`) |
+| `gbp` | this project's Business Profile: `{"account": "accounts/123", "location": "locations/456"}` (ids from `gbp.mjs locations`) |
 | `indexNowKey` | IndexNow key (public by design: it is served at the site root) |
 | `tracker` | where findings go, e.g. `{"type": "linear", "team": "ABC", "ritualIssue": "ABC-12"}`; null → `.seo/log.md` |
 
@@ -60,6 +62,17 @@ Pay-as-you-go API that supplies what Search Console can't: volumes, keyword idea
 
 - **Site behind Cloudflare** (orange cloud): create an API token (https://dash.cloudflare.com/profile/api-tokens → Custom token) with **Account → Account Analytics → Read** and **Zone → Zone → Read**, limited to the site's zone, set `CLOUDFLARE_API_TOKEN`, and re-run setup: it finds the zone and writes `"cloudflare": {"zoneId": "…"}`. (Without Zone Read, pass `--cf-zone <id>` from the zone's Overview page.) 30 days of history on every plan; crawlers are identified by user agent (verified-bot detection needs Bot Management).
 - **Anywhere else** (Vercel, a VPS, any host): log files. `setup.mjs --logs <file or folder>` saves the location in the config and `crawlers.mjs` reads every log file in it (`.log`, `.ndjson`, `.json`, `.gz`); `--file` overrides it for one run. Formats: Vercel Log Drain JSON/NDJSON (`proxy.path`, `proxy.userAgent`, `proxy.statusCode`), generic JSON logs (`userAgent`, `path`, `status`, `timestamp`), and the combined access-log format (nginx, Apache). On Vercel, full request logs only exist through a Log Drain (Pro or Enterprise) to storage you can read; the runtime-logs API keeps at most a day and has no user agent.
+
+## Google Business Profile (optional, local businesses)
+
+Gives `gbp.mjs`: impressions on Search vs Maps, calls, website clicks, direction requests, bookings, the searches that showed the profile, and reviews. It is the slowest source to set up: Google must approve API access first.
+
+1. **Access approval.** The profile must be verified and active for 60+ days. Apply with the "Application for Basic API Access" form linked from https://developers.google.com/my-business/content/prereqs, using the Google Cloud project you will use below. Until it is approved, every API has a quota of 0 requests per minute: `gbp.mjs` then says "quota exceeded … not approved yet". Approval takes days.
+2. **Enable the APIs** in that project (APIs & Services → Library): My Business Account Management API, My Business Business Information API, Business Profile Performance API, Google My Business API (reviews).
+3. **OAuth client.** Service accounts are not accepted: GBP needs a person's consent. APIs & Services → OAuth consent screen (External; add the Google account that manages the profile as a test user, or publish the app: in "Testing" the refresh token expires after 7 days) → Credentials → Create credentials → OAuth client ID → type **Desktop app** → download the JSON. Keep it outside the repo.
+4. **Authorise once:** `node scripts/gbp-auth.mjs --client path/to/client_secret.json`. It opens Google's consent page (or prints the URL), catches the redirect on a local `127.0.0.1` port, and writes `{client_id, client_secret, refresh_token}` to `~/.config/seo-gbp-oauth.json` (`--out` to change; file mode 600). Sign in with the account that owns or manages the profile. The owner does this step; the token is never printed.
+5. **Point the scripts to it:** set `GBP_OAUTH` to that path (or `credentials.gbpOAuth` in the config).
+6. **Pick the location:** `node scripts/gbp.mjs locations` lists every account and location the user manages and stars the one whose website matches the site. Add `"gbp": {"account": "accounts/…", "location": "locations/…"}` to `.seo/config.json`. Agencies: one location per project config; `--location locations/…` overrides for a single run. `doctor.mjs` shows the connected location.
 
 ## Optional MCP servers
 

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { unmangleMsys, msysRoots, parseArgs, parseRobots, rootAllowed, robotsMatch, onHost, hostPattern, regDomainOf, urlKey, signature, period, previousWindow, ctrCurve, expectedCtr, DEFAULT_CTR, delta, signed, gateCompare, pruneAction, contentWords, shingles, jaccard, cwvTrend, sitemapIssues, crawlerOf, parseLogLine } from "../plugins/seo-god-mode/skills/seo/scripts/lib.mjs";
+import { unmangleMsys, msysRoots, parseArgs, parseRobots, rootAllowed, robotsMatch, onHost, hostPattern, regDomainOf, urlKey, signature, period, previousWindow, ctrCurve, expectedCtr, DEFAULT_CTR, delta, signed, gateCompare, pruneAction, contentWords, shingles, jaccard, cwvTrend, sitemapIssues, crawlerOf, parseLogLine, gbpSeries, gbpTotals, gbpKeywordValue, gbpReviewStats, gbpDateParams, gbpMonths, gbpError } from "../plugins/seo-god-mode/skills/seo/scripts/lib.mjs";
 
 const scripts = path.join(path.dirname(fileURLToPath(import.meta.url)), "../plugins/seo-god-mode/skills/seo/scripts");
 
@@ -134,6 +134,42 @@ assert.deepEqual(parseLogLine('203.0.113.9 - - [10/Oct/2026:13:55:36 +0200] "GET
 const vl = parseLogLine(JSON.stringify({ timestamp: 1791000000000, proxy: { path: "/a/", statusCode: 200, userAgent: ["Mozilla/5.0 (compatible; OAI-SearchBot/1.0)"] } }));
 assert.equal(vl.path, "/a/"); assert.equal(vl.status, 200); assert.equal(crawlerOf(vl.ua), "OAI-SearchBot"); assert.ok(vl.time.startsWith("2026-"));
 assert.equal(parseLogLine("garbage"), null);
+
+// Google Business Profile: zero values are omitted by the API (int64 strings otherwise).
+const gs = gbpSeries({ multiDailyMetricTimeSeries: [{ dailyMetricTimeSeries: [
+  { dailyMetric: "CALL_CLICKS", timeSeries: { datedValues: [{ date: { year: 2026, month: 9, day: 2 }, value: "3" }, { date: { year: 2026, month: 9, day: 1 } }] } },
+  { dailyMetric: "WEBSITE_CLICKS", timeSeries: {} },
+] }, { dailyMetricTimeSeries: [{ dailyMetric: "BUSINESS_IMPRESSIONS_MOBILE_MAPS", timeSeries: { datedValues: [{ date: { year: 2026, month: 10, day: 5 }, value: "12" }] } }] }] });
+assert.deepEqual(gs.CALL_CLICKS, [{ date: "2026-09-01", value: 0 }, { date: "2026-09-02", value: 3 }]);
+assert.deepEqual(gs.WEBSITE_CLICKS, []);
+assert.deepEqual(gbpTotals(gs, "2026-09-02", "2026-10-05"), { CALL_CLICKS: 3, WEBSITE_CLICKS: 0, BUSINESS_IMPRESSIONS_MOBILE_MAPS: 12 });
+assert.deepEqual(gbpTotals(gs, "2026-09-03", "2026-10-04"), { CALL_CLICKS: 0, WEBSITE_CLICKS: 0, BUSINESS_IMPRESSIONS_MOBILE_MAPS: 0 });
+assert.deepEqual(gbpSeries({}), {});
+assert.deepEqual(gbpKeywordValue({ value: "120" }), { value: 120, below: null });
+assert.deepEqual(gbpKeywordValue({ threshold: "15" }), { value: null, below: 15 });
+assert.deepEqual(gbpKeywordValue(undefined), { value: null, below: null });
+assert.equal(gbpDateParams("dailyRange.start_date", "2026-09-07"), "dailyRange.start_date.year=2026&dailyRange.start_date.month=9&dailyRange.start_date.day=7");
+assert.deepEqual(gbpMonths(3, "2026-02-14"), { start: { year: 2025, month: 11 }, end: { year: 2026, month: 1 } });
+assert.deepEqual(gbpMonths(1, "2026-10-01"), { start: { year: 2026, month: 9 }, end: { year: 2026, month: 9 } });
+const rs = gbpReviewStats([
+  { starRating: "FIVE", updateTime: "2026-09-01T00:00:00Z", reviewReply: { comment: "thanks" } },
+  { starRating: "ONE", updateTime: "2026-09-03T00:00:00Z", comment: "late" },
+  { starRating: "FIVE", updateTime: "2026-09-05T00:00:00Z" },
+  { starRating: "STAR_RATING_UNSPECIFIED", updateTime: "2026-08-01T00:00:00Z" },
+]);
+assert.deepEqual(rs.dist, { 1: 1, 2: 0, 3: 0, 4: 0, 5: 2 });
+assert.equal(rs.replied, 0.25);
+assert.deepEqual(rs.unanswered.map((r) => r.stars), [5, 1, null]);
+assert.equal(gbpReviewStats([]).replied, null);
+// Access not approved yet (quota 0) and a disabled API are setup problems (exit 2) with the fix in the message.
+const perfUrl = "https://businessprofileperformance.googleapis.com/v1/locations/1:fetchMultiDailyMetricsTimeSeries";
+const q0 = gbpError({ code: 429, status: "RESOURCE_EXHAUSTED", message: "Quota exceeded for quota metric 'Requests' ... limit '0'" }, perfUrl);
+assert.equal(q0.code, 2);
+assert.match(q0.message, /developers\.google\.com\/my-business\/content\/prereqs/);
+const off = gbpError({ code: 403, status: "PERMISSION_DENIED", message: "API has not been used in project 1 before or it is disabled.", details: [{ reason: "SERVICE_DISABLED" }] }, perfUrl);
+assert.equal(off.code, 2);
+assert.match(off.message, /Business Profile Performance API/);
+assert.equal(gbpError({ code: 403, message: "The caller does not have permission" }, "https://mybusiness.googleapis.com/v4/accounts/1/locations/2/reviews").code, 1);
 
 // Ship gate, end to end on files.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "seo-gate-"));

@@ -186,6 +186,7 @@ const config = {
   ...(prev.indexNowKey ? { indexNowKey: prev.indexNowKey } : {}),
   ...(cfZone ? { cloudflare: { ...(prev.cloudflare || {}), zoneId: cfZone } } : {}),
   ...(logs ? { logs } : {}),
+  ...(prev.gbp ? { gbp: prev.gbp } : {}),
   tracker: prev.tracker ?? null,
 };
 fs.mkdirSync(dir, { recursive: true });
@@ -204,7 +205,7 @@ if (topQueries.length) {
 }
 if (todo.length) { console.log("\nTo do (owner):"); todo.forEach((t, i) => console.log(`  ${i + 1}. ${t}`)); }
 if (optional.length) { console.log("\nOptional, when you want it:"); optional.forEach((t) => console.log(`  - ${t}`)); }
-console.log("\nOptional sources (add any time, then run doctor): DataForSEO (keyword volumes, live SERPs, competitors) via DATAFORSEO_LOGIN/DATAFORSEO_PASSWORD; PAGESPEED_API_KEY; BING_WMT_API_KEY; INDEXNOW_KEY. See references/setup.md.");
+console.log("\nOptional sources (add any time, then run doctor): DataForSEO (keyword volumes, live SERPs, competitors) via DATAFORSEO_LOGIN/DATAFORSEO_PASSWORD; PAGESPEED_API_KEY; BING_WMT_API_KEY; INDEXNOW_KEY; Google Business Profile via gbp-auth.mjs + GBP_OAUTH. See references/setup.md.");
 
 if (!a["no-doctor"] && keyPath) { console.log("\n--- doctor ---"); spawnSync(process.execPath, [path.join(here, "doctor.mjs")], { stdio: "inherit" }); }
 process.exit(todo.length ? 3 : 0);
