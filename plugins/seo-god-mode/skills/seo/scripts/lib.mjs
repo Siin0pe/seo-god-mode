@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
 
 // ---------- CLI ----------
 // Repeatable options collect every value in an array ("--filter a --filter b"); any other option keeps its last
@@ -228,6 +229,101 @@ export async function ga4(cfg, { noHostFilter, ...body }) {
   const j = await apiJson(`https://analyticsdata.googleapis.com/v1beta/properties/${cfg.ga4Property}:runReport`, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (j.error) die("GA4 error: " + JSON.stringify(j.error).slice(0, 400));
   return (j.rows || []).map((row) => [...row.dimensionValues.map((d) => d.value), ...row.metricValues.map((m) => Number(m.value))]);
+}
+
+// ---------- Google Business Profile (optional, OAuth user consent: service accounts are not supported) ----------
+export const GBP_PREREQS = "https://developers.google.com/my-business/content/prereqs";
+// Where gbp-auth.mjs writes by default, so setup finds it without an env var.
+export const GBP_OAUTH_DEFAULT = path.join(os.homedir(), ".config", "seo-gbp-oauth.json");
+export const gbpOAuthPath = (cfg) => process.env.GBP_OAUTH || cfg?.credentials?.gbpOAuth || (fs.existsSync(GBP_OAUTH_DEFAULT) ? GBP_OAUTH_DEFAULT : "");
+const GBP_SETUP = `One-time: get Business Profile API access approved (${GBP_PREREQS}), create an OAuth "Desktop app" client, then run
+  node scripts/gbp-auth.mjs --client path/to/client_secret.json
+and set GBP_OAUTH to the file it writes (or credentials.gbpOAuth in .seo/config.json).`;
+let gbpCache = null;
+/** Access token from the refresh token in the GBP_OAUTH file. Throws SourceError (exit 2) when not set up. */
+export async function gbpToken(cfg) {
+  const file = gbpOAuthPath(cfg);
+  if (!file || !fs.existsSync(file)) throw new SourceError(missingText("Google Business Profile OAuth" + (file ? ` (${file} not found)` : ""), GBP_SETUP), 2);
+  if (gbpCache?.file === file && gbpCache.exp > Date.now() + 60000) return gbpCache.token;
+  const c = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (!c.client_id || !c.client_secret || !c.refresh_token) throw new SourceError(`${file} needs client_id, client_secret and refresh_token: re-run gbp-auth.mjs.`, 2);
+  const tok = await apiJson("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", client_id: c.client_id, client_secret: c.client_secret, refresh_token: c.refresh_token }) });
+  // invalid_grant: revoked, or the consent screen is still in "Testing" (refresh tokens then expire after 7 days).
+  if (!tok.access_token) throw new SourceError(`Google Business Profile token refresh failed: ${String(tok.error_description || tok.error?.message || tok.error || "no access_token").replace(/\.$/, "")}. Re-run gbp-auth.mjs (publish the OAuth consent screen to stop 7-day expiry).`, 2);
+  gbpCache = { file, token: tok.access_token, exp: Date.now() + (tok.expires_in || 3600) * 1000 };
+  return tok.access_token;
+}
+/** Date → the API's {prefix}.year/month/day query params (the documented snake_case form). */
+export const gbpDateParams = (prefix, d) => { const [y, m, day] = d.split("-").map(Number); return `${prefix}.year=${y}&${prefix}.month=${m}&${prefix}.day=${day}`; };
+/** The last `months` complete months before `todayIso`: { start: {year, month}, end: {year, month} }. */
+export function gbpMonths(months, todayIso) {
+  const [y, m] = todayIso.split("-").map(Number);
+  const at = (back) => { const t = y * 12 + (m - 1) - back; return { year: Math.floor(t / 12), month: (t % 12) + 1 }; };
+  return { start: at(months), end: at(1) };
+}
+const GBP_APIS = { mybusinessaccountmanagement: "My Business Account Management API", mybusinessbusinessinformation: "My Business Business Information API", businessprofileperformance: "Business Profile Performance API", mybusiness: "Google My Business API" };
+/** API error → { message, code }: quota 0 (access not approved yet) and disabled APIs are setup problems (exit 2). */
+export function gbpError(err, url = "") {
+  const api = GBP_APIS[(url.match(/^https:\/\/([a-z]+)\.googleapis\.com/) || [])[1]] || "the Business Profile APIs";
+  const msg = String(err?.message || "");
+  const reasons = (err?.details || []).map((d) => d.reason).filter(Boolean);
+  if (reasons.includes("SERVICE_DISABLED") || /has not been used in project|is disabled/i.test(msg)) return { code: 2, message: `GBP: ${api} is not enabled in the OAuth client's Google Cloud project. Enable it (APIs & Services → Library), wait a few minutes, retry.` };
+  if (err?.code === 429 || err?.status === "RESOURCE_EXHAUSTED" || /quota/i.test(msg)) return { code: 2, message: `GBP: quota exceeded on ${api}. A quota of 0 means the project's Business Profile API access is not approved yet: apply via ${GBP_PREREQS} (approval takes days; profiles must be verified and active 60+ days).` };
+  if (err?.code === 401) return { code: 2, message: "GBP: credentials rejected (401). Re-run gbp-auth.mjs." };
+  if (err?.code === 403) return { code: 1, message: `GBP: permission denied on ${api}: the Google account that ran gbp-auth.mjs must own or manage this profile. (${msg.slice(0, 160)})` };
+  if (err?.code === 404) return { code: 1, message: `GBP: not found (${url.replace(/\?.*/, "")}): check "gbp.account" / "gbp.location" with gbp.mjs locations.` };
+  return { code: 1, message: `GBP error on ${api}: ${msg.slice(0, 300) || JSON.stringify(err).slice(0, 300)}` };
+}
+export async function gbpFetch(cfg, url) {
+  const token = await gbpToken(cfg);
+  const j = await apiJson(url, { headers: { Authorization: "Bearer " + token } });
+  if (j.error) { const e = gbpError(j.error, url); throw new SourceError(e.message, e.code); }
+  return j;
+}
+async function gbpPages(cfg, url, key, max = 20) {
+  const all = [];
+  let token = "";
+  for (let i = 0; i < max; i++) {
+    const j = await gbpFetch(cfg, url + (token ? `&pageToken=${encodeURIComponent(token)}` : ""));
+    all.push(...(j[key] || []));
+    if (!(token = j.nextPageToken)) break;
+  }
+  return all;
+}
+/** Every location the authorised Google account manages, with its account: [{name, title, websiteUri, account, accountName, ...}]. */
+export async function gbpLocations(cfg) {
+  const accounts = await gbpPages(cfg, "https://mybusinessaccountmanagement.googleapis.com/v1/accounts?pageSize=20", "accounts");
+  const rows = [];
+  for (const a of accounts) for (const l of await gbpPages(cfg, `https://mybusinessbusinessinformation.googleapis.com/v1/${a.name}/locations?readMask=name,title,storefrontAddress,websiteUri&pageSize=100`, "locations")) rows.push({ ...l, account: a.name, accountName: a.accountName });
+  return { accounts, rows };
+}
+/** Locations whose website is on the site's host (www ignored). */
+export const gbpMatches = (rows, site) => {
+  const h = (u) => { try { return new URL(u).host.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
+  return h(site) ? rows.filter((r) => h(r.websiteUri || "") === h(site)) : [];
+};
+/** fetchMultiDailyMetricsTimeSeries response → { METRIC: [{date, value}] }. Zero values are omitted by the API. */
+export function gbpSeries(resp) {
+  const out = {};
+  for (const m of resp?.multiDailyMetricTimeSeries || []) for (const s of m.dailyMetricTimeSeries || []) {
+    const list = (out[s.dailyMetric] ||= []);
+    for (const dv of s.timeSeries?.datedValues || []) { const d = dv.date || {}; list.push({ date: `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`, value: Number(dv.value || 0) }); }
+    list.sort((a, b) => (a.date < b.date ? -1 : 1));
+  }
+  return out;
+}
+/** Sum per metric over [start, end] (inclusive, YYYY-MM-DD). */
+export const gbpTotals = (series, start, end) => Object.fromEntries(Object.entries(series).map(([k, v]) => [k, v.reduce((s, x) => s + (x.date >= start && x.date <= end ? x.value : 0), 0)]));
+/** insightsValue is {value} or {threshold} ("fewer than N"), both int64 strings. */
+export const gbpKeywordValue = (iv) => ({ value: iv?.value != null ? Number(iv.value) : null, below: iv?.threshold != null ? Number(iv.threshold) : null });
+const STARS = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 };
+/** Reviews (v4) → star distribution, replied share and the unanswered ones, newest first. */
+export function gbpReviewStats(reviews) {
+  const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const rated = reviews.map((r) => ({ ...r, stars: STARS[r.starRating] || null }));
+  for (const r of rated) if (r.stars) dist[r.stars]++;
+  const unanswered = rated.filter((r) => !r.reviewReply).sort((a, b) => ((b.updateTime || b.createTime || "") > (a.updateTime || a.createTime || "") ? 1 : -1));
+  return { count: reviews.length, dist, replied: reviews.length ? (reviews.length - unanswered.length) / reviews.length : null, unanswered };
 }
 
 // ---------- PageSpeed / CrUX ----------

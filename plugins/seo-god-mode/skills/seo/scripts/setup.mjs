@@ -3,15 +3,18 @@
 // standards.md, log.md, .gitignore) and runs doctor. Safe to re-run: it only fills fields that are still empty,
 // except those passed explicitly (--gsc, --ga4, --sitemap, --brand, --sa), which replace the saved value.
 // Also detects the host (Cloudflare, Vercel) for crawler visits: with CLOUDFLARE_API_TOKEN set it finds the zone.
+// Google Business Profile: --gbp-client <client_secret.json> runs the one-time consent, then the profile whose
+// website is the site is picked (--gbp-location locations/… when several match).
 // Usage: node setup.mjs --site https://example.com [--sa path/to/key.json] [--gsc sc-domain:example.com]
-//        [--ga4 123456] [--sitemap url] [--brand "acme|akme"] [--cf-zone <zone id>] [--logs <file|dir>] [--no-doctor]
+//        [--ga4 123456] [--sitemap url] [--brand "acme|akme"] [--cf-zone <zone id>] [--logs <file|dir>]
+//        [--gbp-client client_secret.json] [--gbp-location locations/123] [--no-doctor]
 // Exit codes: 0 ready, 3 ready with something left for the owner to do (printed under "To do").
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { parseArgs, googleToken, apiJson, fetchText, addDays, lastFinalDay, regDomainOf, hostPattern } from "./lib.mjs";
+import { parseArgs, googleToken, apiJson, fetchText, addDays, lastFinalDay, regDomainOf, hostPattern, gbpOAuthPath, gbpLocations, gbpMatches, GBP_PREREQS } from "./lib.mjs";
 
 const a = parseArgs();
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -154,6 +157,31 @@ else if (behindCf) { say(null, "Crawler visits", "site is behind Cloudflare: can
 else if (onVercel) { say(null, "Crawler visits", "site is on Vercel: needs log files"); optional.push("Crawler visits: Vercel only keeps full request logs through a Log Drain (Pro plan). Point one at storage you can read, then re-run setup with --logs <file or folder>."); }
 else say(null, "Crawler visits", "optional: re-run with --logs <file or folder> (access logs) to see which crawlers fetch the site");
 
+// ---------- Google Business Profile (optional) ----------
+// Needs Google's API approval and one OAuth consent (no service account). Never a blocking to-do.
+if (a["gbp-client"] && a["gbp-client"] !== true) {
+  console.log("\nGoogle Business Profile: opening Google's consent page…");
+  spawnSync(process.execPath, [path.join(here, "gbp-auth.mjs"), "--client", a["gbp-client"]], { stdio: "inherit" });
+}
+const gbpAuth = gbpOAuthPath(prev);
+let gbp = prev.gbp || null;
+if (a["gbp-location"] && a["gbp-location"] !== true) gbp = { ...(gbp || {}), location: String(a["gbp-location"]).replace(/^(?!locations\/)/, "locations/") };
+if (!gbpAuth) {
+  say(null, "Business Profile", "optional, for local businesses");
+  optional.push(`Google Business Profile: apply for API access (${GBP_PREREQS}, takes days), create an OAuth client of type "Desktop app" in the same Google Cloud project, download its JSON, then re-run setup with --gbp-client <that file>.`);
+} else if (gbp?.location && gbp.account) say(true, "Business Profile", gbp.location);
+else {
+  try {
+    const { rows } = await gbpLocations(prev);
+    const pick = gbp?.location ? rows.filter((r) => r.name === gbp.location) : gbpMatches(rows, site);
+    if (pick.length === 1) { gbp = { account: pick[0].account, location: pick[0].name }; say(true, "Business Profile", `${pick[0].title} (${pick[0].name})`); }
+    else {
+      say(null, "Business Profile", pick.length ? `${pick.length} profiles link to ${host}` : `none of the ${rows.length} profiles you manage links to ${host}`);
+      optional.push(`Google Business Profile: pick the profile for this site and re-run with --gbp-location <id>:\n${(pick.length ? pick : rows).slice(0, 15).map((r) => `      ${r.name}  ${r.title}  ${r.websiteUri || "(no website)"}`).join("\n")}`);
+    }
+  } catch (e) { say(null, "Business Profile", "connected, but not readable yet"); optional.push(String(e.message).split("\n")[0]); }
+}
+
 // ---------- Market (DataForSEO location/language) from the top Search Console country ----------
 const MARKETS = { usa: [2840, "en"], gbr: [2826, "en"], can: [2124, "en"], aus: [2036, "en"], ind: [2356, "en"], irl: [2372, "en"], fra: [2250, "fr"], bel: [2056, "fr"], che: [2756, "de"], deu: [2276, "de"], aut: [2040, "de"], esp: [2724, "es"], mex: [2484, "es"], ita: [2380, "it"], nld: [2528, "nl"], bra: [2076, "pt"], prt: [2620, "pt"], jpn: [2392, "ja"], are: [2784, "ar"], sau: [2682, "ar"], irn: [2364, "fa"], tur: [2792, "tr"], pol: [2616, "pl"] };
 const mk = MARKETS[topCountry];
@@ -182,10 +210,11 @@ const config = {
   cwvUrls: fill(prev.cwvUrls, [...new Set([site + "/", ...pagesByClicks.slice(0, 2).map((p) => site + p)])]),
   keyEvents: prev.keyEvents || [],
   market,
-  credentials: { ...(prev.credentials || {}), serviceAccountKey: given("sa") && keyPath ? keyPath : fill(prev.credentials?.serviceAccountKey, keyPath) },
+  credentials: { ...(prev.credentials || {}), ...(gbpAuth && !process.env.GBP_OAUTH ? { gbpOAuth: gbpAuth } : {}), serviceAccountKey: given("sa") && keyPath ? keyPath : fill(prev.credentials?.serviceAccountKey, keyPath) },
   ...(prev.indexNowKey ? { indexNowKey: prev.indexNowKey } : {}),
   ...(cfZone ? { cloudflare: { ...(prev.cloudflare || {}), zoneId: cfZone } } : {}),
   ...(logs ? { logs } : {}),
+  ...(gbp ? { gbp } : {}),
   tracker: prev.tracker ?? null,
 };
 fs.mkdirSync(dir, { recursive: true });
@@ -204,7 +233,7 @@ if (topQueries.length) {
 }
 if (todo.length) { console.log("\nTo do (owner):"); todo.forEach((t, i) => console.log(`  ${i + 1}. ${t}`)); }
 if (optional.length) { console.log("\nOptional, when you want it:"); optional.forEach((t) => console.log(`  - ${t}`)); }
-console.log("\nOptional sources (add any time, then run doctor): DataForSEO (keyword volumes, live SERPs, competitors) via DATAFORSEO_LOGIN/DATAFORSEO_PASSWORD; PAGESPEED_API_KEY; BING_WMT_API_KEY; INDEXNOW_KEY. See references/setup.md.");
+console.log("\nOptional sources (add any time, then run doctor): DataForSEO (keyword volumes, live SERPs, competitors) via DATAFORSEO_LOGIN/DATAFORSEO_PASSWORD; PAGESPEED_API_KEY; BING_WMT_API_KEY; INDEXNOW_KEY; Google Business Profile via gbp-auth.mjs + GBP_OAUTH. See references/setup.md.");
 
 if (!a["no-doctor"] && keyPath) { console.log("\n--- doctor ---"); spawnSync(process.execPath, [path.join(here, "doctor.mjs")], { stdio: "inherit" }); }
 process.exit(todo.length ? 3 : 0);

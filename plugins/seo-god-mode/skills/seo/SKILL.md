@@ -44,6 +44,7 @@ The user may type `/seo-god-mode:seo <command>` or just ask. Map the request to 
 | `suggest` | Free pattern discovery from Google Autocomplete (no volumes) | `scripts/suggest.mjs "<seed>"` |
 | `gsc` | Any ad-hoc Search Console cut, with period comparison | `scripts/gsc.mjs --dims query,page [--compare] [--filter "query~regex"]` |
 | `bing` | Bing queries / pages | `scripts/bing.mjs queries\|pages` |
+| `gbp` | Google Business Profile: Search vs Maps impressions, calls, website clicks, directions; searches that showed the profile; reviews and unanswered ones (needs Google's API approval, `gbp-auth.mjs` once) | `scripts/gbp.mjs locations\|performance\|keywords\|reviews` |
 | `indexnow` | Ping Bing & co. after publishing | `scripts/indexnow.mjs <url...>` |
 | `crawlers` | Which search and AI crawlers actually fetch the site, what, and with which status; sitemap pages Googlebot skipped | `scripts/crawlers.mjs [--sitemap]` (Cloudflare) or `--file <logs>` |
 | `pattern` | Money keywords and repeatable page patterns | procedure in `references/commands.md#pattern` |
@@ -51,7 +52,7 @@ The user may type `/seo-god-mode:seo <command>` or just ask. Map the request to 
 | `ship` | Publish a page or a change safely | `references/commands.md#ship` |
 | `geo` | AI-search visibility: fan-out queries, prospects, manual citation log | `scripts/geo.mjs queries\|prospects\|log\|report` |
 | `outreach` | Link and mention prospects (lists only, never sends) | `references/commands.md#outreach` |
-| `local` | Google Business Profile and local pages | `references/commands.md#local` |
+| `local` | Google Business Profile and local pages (uses `gbp` data when connected) | `references/commands.md#local` |
 
 For anything that is not a command (a question, an idea, "is X worth it"), answer from the data you can pull and from `references/playbook.md`.
 

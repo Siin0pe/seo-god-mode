@@ -1,7 +1,7 @@
 // Checks every data source the skill can use and prints what is connected, what is missing and how to fix it.
 // Usage: node doctor.mjs [--config path]
 import fs from "node:fs";
-import { loadConfig, parseArgs, serviceAccountKeyPath, googleToken, apiJson, pagespeedKey, cruxKey, cruxHistory, gscSitemaps, sitemapIssues, dataforseoAuth, fetchText, lastFinalDay, addDays, cloudflareGraphql } from "./lib.mjs";
+import { loadConfig, parseArgs, serviceAccountKeyPath, googleToken, apiJson, pagespeedKey, cruxKey, cruxHistory, gscSitemaps, sitemapIssues, dataforseoAuth, fetchText, lastFinalDay, addDays, cloudflareGraphql, gbpOAuthPath, gbpFetch } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
@@ -71,6 +71,14 @@ async function tryOptional() {
     line(d?.viewer?.zones?.length ? true : false, "Crawler visits", d?.viewer?.zones?.length ? `Cloudflare zone ${zone} readable (crawlers.mjs)` : `the token cannot read zone ${zone}: give it Account Analytics: Read on that zone`);
   }
 }
+async function tryGbp() {
+  const file = gbpOAuthPath(cfg), loc = cfg.gbp?.location;
+  if (!file && !loc) return line(null, "Business Profile", 'not configured (optional): gbp-auth.mjs + GBP_OAUTH, then "gbp" in config');
+  if (!file || !fs.existsSync(file)) return line(false, "Business Profile", file ? `OAuth file not found: ${file} (run gbp-auth.mjs)` : "no OAuth file: run gbp-auth.mjs and set GBP_OAUTH");
+  if (!loc) return line(null, "Business Profile", 'OAuth set, no "gbp.location" in config: run gbp.mjs locations');
+  const l = await gbpFetch(cfg, `https://mybusinessbusinessinformation.googleapis.com/v1/${loc.startsWith("locations/") ? loc : "locations/" + loc}?readMask=title,websiteUri`);
+  line(true, "Business Profile", `${l.title} (${loc})${l.websiteUri ? ", links to " + l.websiteUri : ""}`);
+}
 // One failing source (no key, API error) must not hide the state of the others.
-for (const [name, f] of [["Search Console", tryGsc], ["GA4", tryGa4], ["PageSpeed / CrUX", tryPsi], ["Site", trySite], ["Optional sources", tryOptional]]) { try { await f(); } catch (e) { line(false, name, String(e.message || e).split("\n")[0]); } }
+for (const [name, f] of [["Search Console", tryGsc], ["GA4", tryGa4], ["PageSpeed / CrUX", tryPsi], ["Site", trySite], ["Optional sources", tryOptional], ["Business Profile", tryGbp]]) { try { await f(); } catch (e) { line(false, name, String(e.message || e).split("\n")[0]); } }
 console.log("\nTracker:", cfg.tracker ? JSON.stringify(cfg.tracker) : "none configured, findings go to .seo/log.md");
