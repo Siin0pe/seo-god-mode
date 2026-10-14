@@ -56,8 +56,10 @@ Pay-as-you-go API that supplies what Search Console can't: volumes, keyword idea
 
 `crawlers.mjs` shows which search and AI crawlers actually fetch the site, what they fetch and the status they get.
 
-- **Site behind Cloudflare** (orange cloud): create an API token with **Account → Account Analytics → Read**, zone resources limited to the site's zone, and set `CLOUDFLARE_API_TOKEN`. Add `"cloudflare": {"zoneId": "<zone id>"}` to `.seo/config.json` (Zone ID is on the zone's Overview page). 30 days of history on every plan; crawlers are identified by user agent (verified-bot detection needs Bot Management).
-- **Anywhere else** (Vercel, a VPS, any host): pass log files, `crawlers.mjs --file <file> [--file …]`, `.gz` accepted. Formats: Vercel Log Drain JSON/NDJSON (`proxy.path`, `proxy.userAgent`, `proxy.statusCode`), generic JSON logs (`userAgent`, `path`, `status`, `timestamp`), and the combined access-log format (nginx, Apache). On Vercel, full request logs only exist through a Log Drain (Pro or Enterprise) to an endpoint you store; the runtime-logs API keeps at most a day and has no user agent.
+`setup.mjs` detects the host from the home page and says what applies:
+
+- **Site behind Cloudflare** (orange cloud): create an API token (https://dash.cloudflare.com/profile/api-tokens → Custom token) with **Account → Account Analytics → Read** and **Zone → Zone → Read**, limited to the site's zone, set `CLOUDFLARE_API_TOKEN`, and re-run setup: it finds the zone and writes `"cloudflare": {"zoneId": "…"}`. (Without Zone Read, pass `--cf-zone <id>` from the zone's Overview page.) 30 days of history on every plan; crawlers are identified by user agent (verified-bot detection needs Bot Management).
+- **Anywhere else** (Vercel, a VPS, any host): log files. `setup.mjs --logs <file or folder>` saves the location in the config and `crawlers.mjs` reads every log file in it (`.log`, `.ndjson`, `.json`, `.gz`); `--file` overrides it for one run. Formats: Vercel Log Drain JSON/NDJSON (`proxy.path`, `proxy.userAgent`, `proxy.statusCode`), generic JSON logs (`userAgent`, `path`, `status`, `timestamp`), and the combined access-log format (nginx, Apache). On Vercel, full request logs only exist through a Log Drain (Pro or Enterprise) to storage you can read; the runtime-logs API keeps at most a day and has no user agent.
 
 ## Optional MCP servers
 

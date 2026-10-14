@@ -64,7 +64,7 @@ async function tryOptional() {
   if (ik) { const f = await fetchText(`${cfg.site}/${ik}.txt`); line(f.status === 200 && f.text.trim() === ik, "IndexNow", f.status === 200 ? "key file served" : `key file ${cfg.site}/${ik}.txt → ${f.status}`); }
   else line(null, "IndexNow", "not configured (optional): INDEXNOW_KEY + key file at site root");
   const zone = cfg.cloudflare?.zoneId || process.env.CLOUDFLARE_ZONE_ID;
-  if (!zone) line(null, "Crawler visits", 'not configured (optional): config "cloudflare": {"zoneId"} + CLOUDFLARE_API_TOKEN, or crawlers.mjs --file <logs>');
+  if (!zone) line(null, "Crawler visits", cfg.logs ? `log files: ${cfg.logs}` : 'not configured (optional): setup.mjs finds the Cloudflare zone once CLOUDFLARE_API_TOKEN is set, or takes --logs <file or folder>');
   else if (!process.env.CLOUDFLARE_API_TOKEN) line(false, "Crawler visits", `zone ${zone} configured but CLOUDFLARE_API_TOKEN is not set`);
   else {
     const d = await cloudflareGraphql("query($z: String!) { viewer { zones(filter: { zoneTag: $z }) { zoneTag } } }", { z: zone });

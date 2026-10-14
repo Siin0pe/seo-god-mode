@@ -2,8 +2,9 @@
 // property that cover the site, the sitemap, the brand and the main market, then writes .seo/ (config.json,
 // standards.md, log.md, .gitignore) and runs doctor. Safe to re-run: it only fills fields that are still empty,
 // except those passed explicitly (--gsc, --ga4, --sitemap, --brand, --sa), which replace the saved value.
+// Also detects the host (Cloudflare, Vercel) for crawler visits: with CLOUDFLARE_API_TOKEN set it finds the zone.
 // Usage: node setup.mjs --site https://example.com [--sa path/to/key.json] [--gsc sc-domain:example.com]
-//        [--ga4 123456] [--sitemap url] [--brand "acme|akme"] [--no-doctor]
+//        [--ga4 123456] [--sitemap url] [--brand "acme|akme"] [--cf-zone <zone id>] [--logs <file|dir>] [--no-doctor]
 // Exit codes: 0 ready, 3 ready with something left for the owner to do (printed under "To do").
 import fs from "node:fs";
 import os from "node:os";
@@ -17,7 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const dir = path.join(process.cwd(), ".seo");
 const cfgFile = path.join(dir, "config.json");
 const prev = fs.existsSync(cfgFile) ? JSON.parse(fs.readFileSync(cfgFile, "utf8")) : {};
-const todo = [];
+const todo = [], optional = [];
 const say = (ok, what, detail) => console.log(`${ok === true ? "OK  " : ok === false ? "TODO" : "--  "} ${what.padEnd(22)} ${detail}`);
 
 if (Number(process.versions.node.split(".")[0]) < 18) { console.error(`Node 18+ is required (found ${process.versions.node}).`); process.exit(1); }
@@ -135,6 +136,24 @@ if (!sitemap) {
 say(sitemap ? true : false, "Sitemap", sitemap || "none found in robots.txt or at the usual paths");
 if (!sitemap) todo.push("Publish a sitemap and declare it in robots.txt (Sitemap: https://…), then re-run.");
 
+// ---------- Crawler visits (optional): Cloudflare zone, or log files ----------
+// Detected from the home page's headers; never a blocking to-do.
+const home = await fetchText(site + "/");
+const behindCf = /cloudflare/i.test(home.headers?.server || "") || !!home.headers?.["cf-ray"];
+const onVercel = /vercel/i.test(home.headers?.server || "") || !!home.headers?.["x-vercel-id"];
+let cfZone = a["cf-zone"] && a["cf-zone"] !== true ? a["cf-zone"] : prev.cloudflare?.zoneId || "";
+if (!cfZone && process.env.CLOUDFLARE_API_TOKEN) {
+  const z = await apiJson(`https://api.cloudflare.com/client/v4/zones?name=${encodeURIComponent(regDomain)}`, { headers: { Authorization: "Bearer " + process.env.CLOUDFLARE_API_TOKEN } });
+  cfZone = z.result?.[0]?.id || "";
+  if (!cfZone) optional.push(`Cloudflare: the token cannot list the zone ${regDomain} (${z.errors?.[0]?.message || z.error?.message || "not found"}). Give it Zone → Zone → Read too, or re-run with --cf-zone <zone id> (zone Overview page).`);
+}
+const logs = a.logs && a.logs !== true ? a.logs : prev.logs || "";
+if (cfZone) say(true, "Crawler visits", `Cloudflare zone ${cfZone}${process.env.CLOUDFLARE_API_TOKEN ? "" : " (set CLOUDFLARE_API_TOKEN to read it)"}`);
+else if (logs) say(true, "Crawler visits", `log files at ${logs}`);
+else if (behindCf) { say(null, "Crawler visits", "site is behind Cloudflare: can be connected"); optional.push("Crawler visits: create a Cloudflare API token (https://dash.cloudflare.com/profile/api-tokens → Custom token) with Account → Account Analytics → Read and Zone → Zone → Read on this zone, set CLOUDFLARE_API_TOKEN, and re-run setup: the zone is found automatically."); }
+else if (onVercel) { say(null, "Crawler visits", "site is on Vercel: needs log files"); optional.push("Crawler visits: Vercel only keeps full request logs through a Log Drain (Pro plan). Point one at storage you can read, then re-run setup with --logs <file or folder>."); }
+else say(null, "Crawler visits", "optional: re-run with --logs <file or folder> (access logs) to see which crawlers fetch the site");
+
 // ---------- Market (DataForSEO location/language) from the top Search Console country ----------
 const MARKETS = { usa: [2840, "en"], gbr: [2826, "en"], can: [2124, "en"], aus: [2036, "en"], ind: [2356, "en"], irl: [2372, "en"], fra: [2250, "fr"], bel: [2056, "fr"], che: [2756, "de"], deu: [2276, "de"], aut: [2040, "de"], esp: [2724, "es"], mex: [2484, "es"], ita: [2380, "it"], nld: [2528, "nl"], bra: [2076, "pt"], prt: [2620, "pt"], jpn: [2392, "ja"], are: [2784, "ar"], sau: [2682, "ar"], irn: [2364, "fa"], tur: [2792, "tr"], pol: [2616, "pl"] };
 const mk = MARKETS[topCountry];
@@ -165,6 +184,8 @@ const config = {
   market,
   credentials: { ...(prev.credentials || {}), serviceAccountKey: given("sa") && keyPath ? keyPath : fill(prev.credentials?.serviceAccountKey, keyPath) },
   ...(prev.indexNowKey ? { indexNowKey: prev.indexNowKey } : {}),
+  ...(cfZone ? { cloudflare: { ...(prev.cloudflare || {}), zoneId: cfZone } } : {}),
+  ...(logs ? { logs } : {}),
   tracker: prev.tracker ?? null,
 };
 fs.mkdirSync(dir, { recursive: true });
@@ -182,6 +203,7 @@ if (topQueries.length) {
   for (const q of topQueries.slice(0, 20)) console.log(`| ${q.query} | ${q.clicks} | ${q.impressions} | ${q.position} |`);
 }
 if (todo.length) { console.log("\nTo do (owner):"); todo.forEach((t, i) => console.log(`  ${i + 1}. ${t}`)); }
+if (optional.length) { console.log("\nOptional, when you want it:"); optional.forEach((t) => console.log(`  - ${t}`)); }
 console.log("\nOptional sources (add any time, then run doctor): DataForSEO (keyword volumes, live SERPs, competitors) via DATAFORSEO_LOGIN/DATAFORSEO_PASSWORD; PAGESPEED_API_KEY; BING_WMT_API_KEY; INDEXNOW_KEY. See references/setup.md.");
 
 if (!a["no-doctor"] && keyPath) { console.log("\n--- doctor ---"); spawnSync(process.execPath, [path.join(here, "doctor.mjs")], { stdio: "inherit" }); }

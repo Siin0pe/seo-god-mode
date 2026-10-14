@@ -2,21 +2,26 @@
 // they get back. robots.txt says who may crawl; this says who does. Sources:
 //   - Cloudflare (sites behind the Cloudflare proxy): GraphQL Analytics, up to 30 days, every plan.
 //     Needs CLOUDFLARE_API_TOKEN (Account Analytics: Read) and config "cloudflare": {"zoneId": "..."}.
-//   - Log files (any host, e.g. a Vercel Log Drain export, nginx/Apache access logs, .gz accepted).
+//   - Log files (any host, e.g. a Vercel Log Drain export, nginx/Apache access logs, .gz accepted): --file, or
+//     config "logs" (a file or folder, set by setup.mjs --logs).
 // User agents can be spoofed: counts are requests claiming to be each crawler.
 // Usage: node crawlers.mjs [--days 30] [--top 5] [--sitemap]                 (Cloudflare)
 //        node crawlers.mjs --file logs.ndjson [--file access.log.gz ...] [--days N] [--sitemap]
 //   --sitemap: also list sitemap pages Googlebot did not fetch in the window.
 import fs from "node:fs";
+import path from "node:path";
 import readline from "node:readline";
 import zlib from "node:zlib";
 import { parseArgs, loadConfig, CRAWLER_UAS, crawlerOf, parseLogLine, cloudflareGraphql, fetchText, parseRobots, rootAllowed, sitemapUrls, requireSitemap, table, fmt, pct, emit, die } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
-const files = [].concat(args.file || []);
+// --file, else config "logs" (a file or a folder of log files).
+const logDir = (p) => (fs.statSync(p).isDirectory() ? fs.readdirSync(p).filter((f) => /\.(log|ndjson|jsonl?|gz)$|\.log\.\d+$/i.test(f)).map((f) => path.join(p, f)) : [p]);
+const files = args.file ? [].concat(args.file) : cfg.logs && fs.existsSync(cfg.logs) ? logDir(cfg.logs) : [];
+if (cfg.logs && !args.file && !files.length) console.error(`config "logs": ${cfg.logs} not found or holds no log file.`);
 const zoneId = cfg.cloudflare?.zoneId || process.env.CLOUDFLARE_ZONE_ID;
-if (!files.length && !zoneId) die('No source: pass --file <log> (Vercel Log Drain export, access log), or set config "cloudflare": {"zoneId": "..."} with CLOUDFLARE_API_TOKEN. See references/setup.md.', 2);
+if (!files.length && !zoneId) die('No source: run setup.mjs (it finds the Cloudflare zone, or takes --logs <file or folder>), or pass --file <log>. See references/setup.md.', 2);
 const days = Number(args.days || (files.length ? 0 : 30));
 if (zoneId && !files.length && days > 30) die("Cloudflare keeps 30 days per query: use --days 30 or less.");
 const until = new Date(), since = days ? new Date(until - days * 86400000) : null;
