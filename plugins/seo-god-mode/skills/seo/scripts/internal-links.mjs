@@ -2,24 +2,26 @@
 // in-link floor, and for each weak page the best source pages to link FROM, chosen with Search Console data
 // (pages that already get impressions for the target's queries are topically closest) plus the anchor to use.
 // Usage: node internal-links.mjs [--min 5] [--days 90] [--limit 25] [--json]
-import { parseArgs, loadConfig, sitemapUrls, fetchText, signature, pool, gsc, gscObjects, period, queryClass, table, short, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, sitemapUrls, fetchText, signature, pool, gsc, gscObjects, period, queryClass, urlKey, table, short, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
 const floor = Number(args.min || 5);
 const urls = (await sitemapUrls(cfg.sitemap)).map((u) => u.loc);
+// Links, sitemap and Search Console are matched on urlKey(): "/a" linked as "/a/" is still a link to the page.
+const byKey = new Map(urls.map((u) => [urlKey(u), u]));
 const set = new Set(urls);
 const pages = await pool(urls, 5, async (u) => { const r = await fetchText(u); return { url: u, sig: r.status === 200 ? signature(r.text, u) : null }; });
 const inl = new Map(urls.map((u) => [u, new Set()]));
 const anchorsTo = new Map();
 for (const p of pages) for (const a of p.sig?.anchors || []) {
-  let t; try { const x = new URL(a.href, p.url); x.hash = ""; x.search = ""; t = x.href; } catch { continue; }
-  if (t === p.url || !set.has(t)) continue;
+  let t; try { t = byKey.get(urlKey(new URL(a.href, p.url).href)); } catch { continue; }
+  if (!t || t === p.url) continue;
   inl.get(t).add(p.url);
   anchorsTo.set(t, [...(anchorsTo.get(t) || []), a.text]);
 }
 const win = period(args, 90);
-const pq = gscObjects(await gsc(cfg, { startDate: win.start, endDate: win.end, dimensions: ["page", "query"] }), ["page", "query"]).filter((r) => queryClass(cfg, r.query) !== "brand");
+const pq = gscObjects(await gsc(cfg, { startDate: win.start, endDate: win.end, dimensions: ["page", "query"] }), ["page", "query"]).filter((r) => queryClass(cfg, r.query) !== "brand").map((r) => ({ ...r, page: byKey.get(urlKey(r.page)) || r.page }));
 const queriesOf = new Map();
 for (const r of pq) queriesOf.set(r.page, [...(queriesOf.get(r.page) || []), r]);
 const words = (s) => new Set(s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3));

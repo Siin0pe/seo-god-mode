@@ -4,6 +4,31 @@ All notable changes to SEO God Mode are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-14
+
+### Fixed
+
+- `ship-gate` could pass a page it should block: a `--before`/`--after` URL that is not a 200 was compared as an empty page (now exit 2), and in `--dist` a live page that timed out or returned a 5xx was treated as a new page (now blocking; only 404/410 count as new). `--published` compares the canonical's host too, and `--before` from a file takes the page URL from the canonical so internal links are counted right.
+- The 1.1.1 Git Bash fix rewrote real file paths under any folder named `git` (`--out C:/Users/me/git/repo/r.md` became `/repo/r.md`). Only the actual Git install root (from `EXEPATH`, or `Program Files/Git`) is stripped now.
+- Repeated `--filter` options reached `gsc.mjs` as the last one only; `--k=v` cut values containing `=` (`--filter=page=/x`).
+- Domain-property host filtering matched `notexample.com` for `example.com` (`contains`); it is now an exact-host regex. Same for setup's property and GA4 stream detection, `twins` and `geo prospects`.
+- `doctor` stopped at the first missing key or token error; every source is checked now.
+- Google, PageSpeed and DataForSEO calls retry on 429/5xx with a timeout, and an HTML error page no longer crashes with a JSON parse error. A broken child sitemap is skipped with a warning instead of stopping the run.
+- `index-status` cached API errors (quota) for the day and only saved at the end; errors are retried on the next run and progress is saved as it goes.
+- `indexnow` exited 0 on a rejected batch, sent off-host URLs (the API rejects the whole batch), and crashed on `--from-sitemap` without a sitemap.
+- Re-running `setup.mjs` ignored `--gsc`, `--ga4`, `--sitemap`, `--brand` and `--sa` when a value was already saved.
+- `prune` and `internal-links` matched URLs character for character, so a trailing-slash difference between the sitemap, links and Search Console showed false zero-traffic pages and false orphans. Pages with no impression and no `lastmod` were "too young" forever; they are now flagged for a check.
+- `audit` flagged relative canonicals and hreflang links as pointing elsewhere.
+- `serp-mix` counted every `.co.uk` (and similar) result as yours.
+- `robots.txt`: `Disallow: /*` was not seen as blocking the root, and several groups for the same crawler were not merged.
+- `repoint` and `twins` split accented words ("réseau" → "re seau").
+- Invalid `brand` or `classes` regexes in the config crash with a clear message; `rankmap` reads quoted CSV fields and reports empty files; one bad line in the GEO log no longer breaks `geo report`; `weekly` no longer slows down quadratically on large query sets; `quick-wins` describes the CTR curve it actually used.
+
+### Changed
+
+- CI unit checks cover argument parsing, robots.txt matching, host and URL matching, and run the ship gate end to end on fixtures. The zero-dependency check also catches single-quoted, multi-line and dynamic imports.
+- Docs: the command syntax is `/seo-god-mode:seo <command>`, `setup` is in the command table, and the scheduled monthly run says what it can and cannot do unattended.
+
 ## [1.1.1] - 2026-10-14
 
 ### Fixed

@@ -13,9 +13,12 @@ if (args.only) urls = urls.filter((u) => u.includes(args.only));
 urls = urls.slice(0, Number(args.limit || 300));
 const file = cachePath(cfg, `inspect-${today()}.json`);
 const cache = !args.fresh && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
-const todo = urls.filter((u) => !cache[u]);
-await pool(todo, 3, async (u) => { cache[u] = await inspectUrl(cfg, u); });
-fs.writeFileSync(file, JSON.stringify(cache, null, 2));
+// Errors (quota, transient) are retried on the next run instead of being cached for the day.
+const todo = urls.filter((u) => !cache[u] || cache[u].error);
+const save = () => fs.writeFileSync(file, JSON.stringify(Object.fromEntries(Object.entries(cache).filter(([, r]) => !r.error)), null, 2));
+let done = 0;
+await pool(todo, 3, async (u) => { cache[u] = await inspectUrl(cfg, u); if (++done % 25 === 0) save(); });
+save();
 
 const res = urls.map((u) => cache[u]);
 const indexed = res.filter((r) => r.verdict === "PASS");
