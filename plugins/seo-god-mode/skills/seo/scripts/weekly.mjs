@@ -24,7 +24,8 @@ if (cfg.targets?.length) {
   md += "\n\n## Target queries\n\n" + table(["query", "clicks", "impr", "ctr", "pos", "pos prev"], cfg.targets.map((t) => { const a = m.get(t), b = n.get(t); return [t, a ? a.clicks : 0, a ? a.impressions : 0, a ? pct(a.ctr) : "—", a ? a.position.toFixed(1) : "—", b ? b.position.toFixed(1) : "—"]; }));
 }
 const pm = new Map(qp.map((r) => [r.query, r]));
-const movers = [...qc.map((r) => ({ ...r, d: r.clicks - (pm.get(r.query)?.clicks || 0), pp: pm.get(r.query)?.position })), ...qp.filter((r) => !qc.find((x) => x.query === r.query)).map((r) => ({ ...r, clicks: 0, d: -r.clicks, pp: r.position, position: null }))].sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 15);
+const curQueries = new Set(qc.map((r) => r.query));
+const movers = [...qc.map((r) => ({ ...r, d: r.clicks - (pm.get(r.query)?.clicks || 0), pp: pm.get(r.query)?.position })), ...qp.filter((r) => !curQueries.has(r.query)).map((r) => ({ ...r, clicks: 0, d: -r.clicks, pp: r.position, position: null }))].sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 15);
 md += "\n\n## Biggest query movers (clicks)\n\n" + table(["query", "class", "clicks", "Δ", "pos prev → cur"], movers.map((r) => [r.query, queryClass(cfg, r.query), r.clicks, (r.d >= 0 ? "+" : "") + r.d, `${r.pp ? r.pp.toFixed(1) : "—"} → ${r.position ? r.position.toFixed(1) : "—"}`]));
 const ppm = new Map(pp.map((r) => [r.page, r]));
 md += "\n\n## Pages\n\n" + table(["page", "clicks", "Δ", "impr", "pos"], pc.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions).slice(0, 20).map((r) => [short(r.page, cfg), r.clicks, signed(delta(r.clicks, ppm.get(r.page)?.clicks || 0)), r.impressions, r.position.toFixed(1)]));

@@ -9,7 +9,7 @@
 //   report                        cited share per engine and per month from .seo/geo-log.jsonl
 import fs from "node:fs";
 import path from "node:path";
-import { parseArgs, loadConfig, dataforseo, dataforseoAuth, table, today, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, dataforseo, dataforseoAuth, onHost, table, today, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
@@ -38,7 +38,7 @@ if (cmd === "queries") {
   for (const q of qs) {
     const r = await dataforseo("serp/google/organic/live/advanced", [{ keyword: q, location_code: Number(cfg.market?.location || 2840), language_code: cfg.market?.language || "en", depth: Number(args.top || 10) }]);
     cost += r.cost;
-    for (const i of (r.result[0]?.items || []).filter((x) => x.type === "organic")) rows.push([q, i.rank_absolute, i.domain, i.title, i.url, (cfg.hostFilter && i.url.includes(cfg.hostFilter)) ? "YOU" : comps.some((c) => i.domain.includes(c)) ? "competitor" : ""]);
+    for (const i of (r.result[0]?.items || []).filter((x) => x.type === "organic")) rows.push([q, i.rank_absolute, i.domain, i.title, i.url, onHost(i.url, cfg.hostFilter || new URL(cfg.site).host) ? "YOU" : comps.some((c) => i.domain.includes(c)) ? "competitor" : ""]);
   }
   emit(args, `## GEO prospects — pages ranking for fan-out queries (cost $${cost.toFixed(4)})\n\nListicles and comparisons by third parties are the placements to earn (ask to be added when the list is recent, ranks, and already includes a competitor). Your own pages ranking here are what keeps you citable.\n\n` + table(["query", "rank", "domain", "title", "url", "who"], rows), rows);
 } else if (cmd === "log") {
@@ -47,7 +47,8 @@ if (cmd === "queries") {
   fs.appendFileSync(logFile, JSON.stringify(e) + "\n");
   console.log("logged to " + logFile);
 } else if (cmd === "report") {
-  const rows = fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
+  // One hand-edited bad line must not hide the whole log.
+  const rows = (fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8").split(/\r?\n/).filter((l) => l.trim()) : []).flatMap((l, i) => { try { const r = JSON.parse(l); return r.date && r.engine ? [{ sources: [], ...r }] : []; } catch { console.error(`skipped line ${i + 1} of ${logFile}: not JSON`); return []; } });
   const g = new Map();
   for (const r of rows) { const k = `${r.date.slice(0, 7)} ${r.engine}`; const v = g.get(k) || { n: 0, c: 0 }; v.n++; v.c += r.cited ? 1 : 0; g.set(k, v); }
   const src = new Map();

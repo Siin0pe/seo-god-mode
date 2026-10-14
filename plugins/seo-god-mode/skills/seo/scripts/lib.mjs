@@ -5,37 +5,68 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 // ---------- CLI ----------
+// Repeatable options collect every value in an array ("--filter a --filter b"); any other option keeps its last
+// value. "--k=v" keeps any "=" inside v.
+const MULTI_ARGS = new Set(["filter"]);
 export function parseArgs(argv = process.argv.slice(2)) {
-  if (argv.includes("--help") || argv.includes("-h")) {
-    // Every script documents itself in its leading comment block.
-    const src = fs.readFileSync(process.argv[1], "utf8").split("\n");
-    console.log(src.filter((l, i) => l.startsWith("//") && src.slice(0, i).every((x) => x.startsWith("//"))).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
-    console.log("\nCommon options: --days N | --start YYYY-MM-DD --end YYYY-MM-DD, --host <hostname>|all, --json, --out <file>, --config <path>");
-    process.exit(0);
-  }
   const out = { _: [] };
+  const set = (k, v) => { out[k] = MULTI_ARGS.has(k) ? [].concat(out[k] ?? [], v) : v; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    if (a === "--help" || a === "-h") printHelp();
     if (!a.startsWith("--")) { out._.push(a); continue; }
-    const [k, v] = a.slice(2).split("=");
-    if (v !== undefined) out[k] = v;
-    else if (argv[i + 1] && !argv[i + 1].startsWith("--")) out[k] = argv[++i];
-    else out[k] = true;
+    const eq = a.indexOf("=");
+    if (eq > 2) set(a.slice(2, eq), a.slice(eq + 1));
+    else if (argv[i + 1] && !argv[i + 1].startsWith("--")) set(a.slice(2), argv[++i]);
+    else set(a.slice(2), true);
   }
-  if (process.env.MSYSTEM) for (const k of Object.keys(out)) if (typeof out[k] === "string") out[k] = unmangleMsys(out[k], URL_PATH_ARGS.has(k));
+  if (process.env.MSYSTEM) {
+    const roots = msysRoots();
+    for (const k of Object.keys(out)) {
+      const fix = (v) => (typeof v === "string" ? unmangleMsys(v, URL_PATH_ARGS.has(k), roots) : v);
+      out[k] = Array.isArray(out[k]) ? out[k].map(fix) : fix(out[k]);
+    }
+  }
   return out;
 }
+function printHelp() {
+  // Every script documents itself in its leading comment block.
+  const src = fs.readFileSync(process.argv[1], "utf8").split("\n");
+  console.log(src.filter((l, i) => l.startsWith("//") && src.slice(0, i).every((x) => x.startsWith("//"))).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+  console.log("\nCommon options: --days N | --start YYYY-MM-DD --end YYYY-MM-DD, --host <hostname>|all, --json, --out <file>, --config <path>");
+  process.exit(0);
+}
 // Git Bash (MSYS) rewrites arguments that look like POSIX paths before Node sees them: "/learn/" becomes
-// "C:/Program Files/Git/learn/" and "/a/,/b/" becomes "A:/,/b/". URL paths are what these scripts take, so undo it.
+// "C:/Program Files/Git/learn/" and "/a/,/b/" becomes "A:/,/b/" (or "A://"). URL paths are what these scripts
+// take, so undo it. Only the real Git install root is stripped: "C:/Users/me/git/repo/r.md" is a real path.
 const URL_PATH_ARGS = new Set(["paths", "only"]);
-export function unmangleMsys(v, urlPathArg = false) {
-  let s = v.replace(/(^|[,\^])[A-Za-z]:\/(?:[^,]*?\/)?Git\//gi, "$1/");
+export function msysRoots(env = process.env) {
+  const roots = new Set();
+  // Git Bash sets EXEPATH to <root>\bin (or <root> itself).
+  if (env.EXEPATH) roots.add(env.EXEPATH.replace(/\\/g, "/").replace(/\/(usr\/)?bin\/?$/i, "").replace(/\/?$/, "/"));
+  return [...roots];
+}
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function unmangleMsys(v, urlPathArg = false, roots = msysRoots()) {
+  const alts = [...roots.map(escRe), "[A-Za-z]:/Program Files(?: \\(x86\\))?/Git/"].join("|");
+  let s = v.replace(new RegExp(`(^|[,\\^])(?:${alts})`, "gi"), "$1/");
   // A one-letter first segment is read as a drive ("/a/" → "A:/"). Only safe to undo for URL-path options.
-  if (urlPathArg) s = s.split(",").map((p) => p.replace(/^([A-Za-z]):\//, (_, d) => "/" + d.toLowerCase() + "/")).join(",");
+  if (urlPathArg) s = s.split(",").map((p) => p.replace(/^([A-Za-z]):\/\/?/, (_, d) => "/" + d.toLowerCase() + "/")).join(",");
   return s;
 }
 export const die = (msg, code = 1) => { console.error(msg); process.exit(code); };
-export const missing = (what, how) => die(`MISSING SOURCE: ${what}\n${how}\nSee references/setup.md.`, 2);
+export const missing = (what, how) => die(missingText(what, how), 2);
+const missingText = (what, how) => `MISSING SOURCE: ${what}\n${how}\nSee references/setup.md.`;
+// Thrown (instead of exiting) where a caller may want to carry on, e.g. doctor checking every source.
+// Uncaught, it exits with its code like die()/missing() would.
+export class SourceError extends Error {
+  constructor(message, code = 1) { super(message); this.code = code; }
+}
+process.on("uncaughtException", (e) => {
+  if (e instanceof SourceError) { console.error(e.message); process.exit(e.code); }
+  console.error(e);
+  process.exit(1);
+});
 
 // ---------- Config ----------
 // Looked up from the cwd upwards: .seo/config.json. --config overrides.
@@ -59,9 +90,25 @@ export function loadConfig(args = {}) {
   cfg.hostFilter ??= cfg.site.replace(/^https?:\/\//, "");
   if (args.host) cfg.hostFilter = args.host === "all" ? "" : args.host; // --host other.example.com | --host all
   if (args.host && args.host !== "all") cfg.ga4Hostname = args.host;
-  cfg.brandRegex = cfg.brand ? new RegExp(cfg.brand, "i") : null;
-  cfg.classRegex = Object.entries(cfg.classes || {}).map(([k, v]) => [k, new RegExp(v, "i")]);
+  const re = (src, field) => { try { return new RegExp(src, "i"); } catch (e) { die(`Invalid regex in ${file} "${field}": ${e.message}`); } };
+  cfg.brandRegex = cfg.brand ? re(cfg.brand, "brand") : null;
+  cfg.classRegex = Object.entries(cfg.classes || {}).map(([k, v]) => [k, re(v, `classes.${k}`)]);
   return cfg;
+}
+// hostFilter is a host, optionally with a path prefix ("example.com/fr"). Matches that host exactly:
+// "notexample.com" and "example.com.evil.io" are other sites.
+export const hostPattern = (hostFilter) => `^https?://${escRe(hostFilter.replace(/\/$/, ""))}([/?#:]|$)`;
+export const onHost = (url, hostFilter) => !hostFilter || new RegExp(hostPattern(hostFilter), "i").test(url);
+// Registrable domain, good enough without a public-suffix list: blog.example.com → example.com,
+// shop.example.co.uk → example.co.uk.
+export function regDomainOf(host) {
+  const labels = host.replace(/^www\./, "").split(".");
+  return labels.length > 2 && labels.at(-1).length === 2 && labels.at(-2).length <= 3 ? labels.slice(-3).join(".") : labels.slice(-2).join(".");
+}
+// Key to match the same page across the sitemap, Search Console and links: case-insensitive host, no
+// fragment or query, no trailing slash. Not a canonical: "/a" and "/a/" are different URLs to Google.
+export function urlKey(u) {
+  try { const x = new URL(u); return `${x.protocol}//${x.host.toLowerCase()}${x.pathname.replace(/\/+$/, "") || "/"}`; } catch { return u; }
 }
 export function queryClass(cfg, q) {
   if (cfg.brandRegex?.test(q)) return "brand";
@@ -97,9 +144,10 @@ const tokenCache = new Map();
 export function serviceAccountKeyPath(cfg) {
   return process.env.SEO_SA_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS || cfg?.credentials?.serviceAccountKey;
 }
+/** Throws SourceError (exit 2 when uncaught) so callers like doctor can report it and keep going. */
 export async function googleToken(cfg, scopes) {
   const keyPath = serviceAccountKeyPath(cfg);
-  if (!keyPath || !fs.existsSync(keyPath)) missing("Google service account key", "Set SEO_SA_KEY (or credentials.serviceAccountKey in .seo/config.json) to the JSON key path, and add the service account email as a user on the Search Console property / GA4 property.");
+  if (!keyPath || !fs.existsSync(keyPath)) throw new SourceError(missingText("Google service account key", "Set SEO_SA_KEY (or credentials.serviceAccountKey in .seo/config.json) to the JSON key path, and add the service account email as a user on the Search Console property / GA4 property."), 2);
   const cacheKey = scopes.join(" ");
   const hit = tokenCache.get(cacheKey);
   if (hit && hit.exp > Date.now() + 60000) return hit.token;
@@ -108,11 +156,25 @@ export async function googleToken(cfg, scopes) {
   const claim = { iss: key.client_email, scope: cacheKey, aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3000 };
   const unsigned = b64({ alg: "RS256", typ: "JWT" }) + "." + b64(claim);
   const sig = crypto.createSign("RSA-SHA256").update(unsigned).sign(key.private_key).toString("base64url");
-  const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: unsigned + "." + sig }) });
-  const tok = await r.json();
-  if (!tok.access_token) die("Google token error: " + JSON.stringify(tok).slice(0, 300));
+  const tok = await apiJson("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: unsigned + "." + sig }) });
+  if (!tok.access_token) throw new SourceError("Google token error: " + JSON.stringify(tok).slice(0, 300));
   tokenCache.set(cacheKey, { token: tok.access_token, exp: Date.now() + 2900000 });
   return tok.access_token;
+}
+/** fetch + JSON with a timeout and retries on 429/5xx/network errors. Never throws on a bad response:
+ *  a non-JSON body (HTML error page) comes back as { error: { code, message } }. */
+export async function apiJson(url, init = {}, { retries = 3, timeout = 60000 } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    let status = 0, text = "";
+    try {
+      const r = await fetch(url, { ...init, signal: AbortSignal.timeout(timeout) });
+      status = r.status;
+      text = await r.text();
+    } catch (e) { text = String(e); }
+    const retryable = status === 0 || status === 429 || status >= 500;
+    if (retryable && attempt < retries) { await new Promise((ok) => setTimeout(ok, 1000 * 2 ** attempt)); continue; }
+    try { return JSON.parse(text); } catch { return { error: { code: status, message: `HTTP ${status || "network error"}: ${text.replace(/\s+/g, " ").slice(0, 200)}` } }; }
+  }
 }
 const GSC_SCOPE = ["https://www.googleapis.com/auth/webmasters.readonly"];
 const GA_SCOPE = ["https://www.googleapis.com/auth/analytics.readonly"];
@@ -124,12 +186,11 @@ export async function gsc(cfg, body, { hostOnly = true, max = 100000 } = {}) {
   if (!cfg.gscProperty) missing("Search Console property", 'Set "gscProperty" in .seo/config.json (e.g. "sc-domain:example.com" or "https://example.com/").');
   const token = await googleToken(cfg, GSC_SCOPE);
   const filters = [...(body.dimensionFilterGroups?.[0]?.filters || [])];
-  if (hostOnly && cfg.hostFilter && cfg.gscProperty.startsWith("sc-domain:")) filters.push({ dimension: "page", operator: "contains", expression: cfg.hostFilter });
+  if (hostOnly && cfg.hostFilter && cfg.gscProperty.startsWith("sc-domain:")) filters.push({ dimension: "page", operator: "includingRegex", expression: hostPattern(cfg.hostFilter) });
   const rows = [];
   for (let startRow = 0; startRow < max; startRow += 25000) {
     const req = { dataState: "all", ...body, rowLimit: Math.min(25000, max - startRow), startRow, ...(filters.length ? { dimensionFilterGroups: [{ filters }] } : {}) };
-    const r = await fetch(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(cfg.gscProperty)}/searchAnalytics/query`, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify(req) });
-    const j = await r.json();
+    const j = await apiJson(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(cfg.gscProperty)}/searchAnalytics/query`, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify(req) });
     if (j.error) die("GSC error: " + JSON.stringify(j.error).slice(0, 400));
     const got = j.rows || [];
     rows.push(...got);
@@ -142,24 +203,21 @@ export const gscObjects = (rows, dims) => rows.map((r) => ({ ...Object.fromEntri
 
 export async function inspectUrl(cfg, url) {
   const token = await googleToken(cfg, GSC_SCOPE);
-  const r = await fetch("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify({ inspectionUrl: url, siteUrl: cfg.gscProperty }) });
-  const j = await r.json();
+  const j = await apiJson("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify({ inspectionUrl: url, siteUrl: cfg.gscProperty }) });
   if (j.error) return { url, error: j.error.message };
   const s = j.inspectionResult?.indexStatusResult || {};
   return { url, verdict: s.verdict, coverage: s.coverageState, lastCrawl: s.lastCrawlTime, robots: s.robotsTxtState, indexing: s.indexingState, canonicalGoogle: s.googleCanonical, canonicalUser: s.userCanonical, sitemaps: s.sitemap };
 }
 
 // ---------- GA4 ----------
-export async function ga4(cfg, body) {
+export async function ga4(cfg, { noHostFilter, ...body }) {
   if (!cfg.ga4Property) missing("GA4 property", 'Set "ga4Property" (numeric id) in .seo/config.json and add the service account as Viewer on the property.');
   const token = await googleToken(cfg, GA_SCOPE);
-  if (cfg.ga4Hostname && !body.noHostFilter) {
+  if (cfg.ga4Hostname && !noHostFilter) {
     const host = { filter: { fieldName: "hostName", stringFilter: { value: cfg.ga4Hostname } } };
     body.dimensionFilter = body.dimensionFilter ? { andGroup: { expressions: [body.dimensionFilter, host] } } : host;
   }
-  delete body.noHostFilter;
-  const r = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${cfg.ga4Property}:runReport`, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const j = await r.json();
+  const j = await apiJson(`https://analyticsdata.googleapis.com/v1beta/properties/${cfg.ga4Property}:runReport`, { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (j.error) die("GA4 error: " + JSON.stringify(j.error).slice(0, 400));
   return (j.rows || []).map((row) => [...row.dimensionValues.map((d) => d.value), ...row.metricValues.map((m) => Number(m.value))]);
 }
@@ -174,7 +232,7 @@ export async function pagespeed(cfg, url, strategy = "mobile") {
   const key = pagespeedKey(cfg);
   const q = new URLSearchParams({ url, strategy, category: "performance" });
   if (key) q.set("key", key);
-  const j = await (await fetch("https://www.googleapis.com/pagespeedonline/v5/runPagespeed?" + q)).json();
+  const j = await apiJson("https://www.googleapis.com/pagespeedonline/v5/runPagespeed?" + q, {}, { timeout: 120000 });
   if (j.error) return { url, error: j.error.message };
   const m = j.loadingExperience?.metrics || {};
   const p = (k) => m[k]?.percentile;
@@ -194,9 +252,8 @@ export function dataforseoAuth() {
 export async function dataforseo(endpoint, tasks) {
   const auth = dataforseoAuth();
   if (!auth) missing("DataForSEO", "Set DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD (API credentials from app.dataforseo.com). Without it, use suggest.mjs (free) and never invent volumes.");
-  const r = await fetch("https://api.dataforseo.com/v3/" + endpoint, { method: "POST", headers: { Authorization: auth, "Content-Type": "application/json" }, body: JSON.stringify(tasks) });
-  const j = await r.json();
-  if (j.status_code !== 20000) die("DataForSEO error: " + j.status_message);
+  const j = await apiJson("https://api.dataforseo.com/v3/" + endpoint, { method: "POST", headers: { Authorization: auth, "Content-Type": "application/json" }, body: JSON.stringify(tasks) });
+  if (j.status_code !== 20000) die("DataForSEO error: " + (j.status_message || j.error?.message));
   const t = j.tasks?.[0];
   if (t?.status_code !== 20000) die("DataForSEO task error: " + t?.status_message);
   return { cost: j.cost, result: t.result || [] };
@@ -217,7 +274,11 @@ export async function sitemapUrls(sitemapUrl, seen = new Set()) {
   if (seen.has(sitemapUrl)) return [];
   seen.add(sitemapUrl);
   const { text, status } = await fetchText(sitemapUrl);
-  if (status !== 200) die(`Sitemap ${sitemapUrl} returned ${status}`);
+  if (status !== 200) {
+    // A broken child sitemap should not hide the URLs of every other one.
+    if (seen.size > 1) { console.error(`warning: sitemap ${sitemapUrl} returned ${status}, skipped`); return []; }
+    die(`Sitemap ${sitemapUrl} returned ${status}`);
+  }
   if (/<sitemapindex/i.test(text)) {
     const subs = [...text.matchAll(/<sitemap>[\s\S]*?<loc>\s*([^<\s]+)\s*<\/loc>[\s\S]*?<\/sitemap>/gi)].map((m) => m[1]);
     return (await Promise.all(subs.map((s) => sitemapUrls(s, seen)))).flat();
@@ -295,12 +356,19 @@ export function parseRobots(text) {
   }
   return groups;
 }
-/** Is the site root crawlable for this agent? Uses the most specific matching group, longest-path rule wins. */
+/** Does a robots.txt path pattern match this path? Supports "*" and a trailing "$" (RFC 9309). */
+export function robotsMatch(pattern, p) {
+  const end = pattern.endsWith("$");
+  const body = (end ? pattern.slice(0, -1) : pattern).split("*").map(escRe).join(".*");
+  return new RegExp("^" + body + (end ? "$" : "")).test(p);
+}
+/** Is the site root crawlable for this agent? Every group naming the agent applies (merged), else every "*"
+ *  group; the longest matching rule wins, and allow wins a tie. */
 export function rootAllowed(groups, agent) {
   const a = agent.toLowerCase();
-  const g = groups.find((x) => x.agents.some((n) => n !== "*" && a.includes(n))) || groups.find((x) => x.agents.includes("*"));
-  if (!g) return true;
-  const hits = g.rules.filter((r) => "/".startsWith(r.path) || r.path === "/").sort((p, q) => q.path.length - p.path.length || (p.allow ? -1 : 1));
+  let gs = groups.filter((x) => x.agents.some((n) => n !== "*" && a.includes(n)));
+  if (!gs.length) gs = groups.filter((x) => x.agents.includes("*"));
+  const hits = gs.flatMap((g) => g.rules).filter((r) => robotsMatch(r.path, "/")).sort((p, q) => q.path.length - p.path.length || (p.allow ? -1 : 1));
   return hits.length ? hits[0].allow : true;
 }
 export const CRAWLERS = { search: ["Googlebot", "Bingbot"], aiRetrieval: ["OAI-SearchBot", "ChatGPT-User", "Claude-SearchBot", "Claude-User", "PerplexityBot", "Perplexity-User"], aiTraining: ["GPTBot", "ClaudeBot", "Google-Extended", "CCBot", "Applebot-Extended", "meta-externalagent", "Bytespider"] };

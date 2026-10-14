@@ -7,7 +7,7 @@ Set up the recurring SEO rituals for the project in the current directory. Reply
 
 The rituals:
 - **Weekly, Monday:** `/seo-god-mode:seo weekly`: writes `.seo/reports/<week>.md` and, if a tracker is configured, posts it there.
-- **Monthly, first Monday:** the GEO check and index coverage (`/seo-god-mode:seo geo monthly`).
+- **Monthly, first Monday:** `/seo-god-mode:seo geo monthly`: the parts of the GEO check a script can do (fan-out queries, prospects, citation report), index coverage (`index`), and the list of buyer prompts for the owner to run by hand. Nobody can check AI citations for them unattended.
 
 ## 1. Check it can run unattended
 
@@ -22,6 +22,8 @@ Build the command for this OS, with the project's absolute path. The headless ru
 ```
 claude -p "/seo-god-mode:seo weekly" --allowedTools "Bash(node:*)" Read Write Glob Grep
 ```
+
+If `.seo/config.json` has a `tracker`, add the tools that post to it (for Linear, e.g. `mcp__linear__save_document`), or the report stays in `.seo/reports/` only. Say which one applies.
 
 - **Windows** (Task Scheduler), run from the project directory:
   `schtasks /Create /TN "SEO weekly - <project>" /SC WEEKLY /D MON /ST 08:00 /TR "cmd /c cd /d \"<project path>\" && claude -p \"/seo-god-mode:seo weekly\" --allowedTools \"Bash(node:*)\" Read Write Glob Grep > .seo\reports\last-run.log 2>&1"`

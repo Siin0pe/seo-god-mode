@@ -103,6 +103,9 @@ First week of the month:
 3. `geo.mjs report`: cited share per engine per month, and which domains the engines cite. Those domains are the outreach list.
 4. Check every third-party ranking that lists the site still does, and refresh your own rankings with the new year in the title.
 5. Once a quarter: `serp-mix.mjs` on the money queries (open slots, subreddits, videos, lists without you).
+6. `index-status.mjs`: monthly index coverage.
+
+Unattended (scheduled run): do steps 1, 3 and 6, then write step 2 as a to-do for the owner in `.seo/reports/` (the 10 prompts to run, and the `geo.mjs log` line to record each). Never log a citation nobody checked.
 
 **Reddit and forums, done right.** (1) Write 10 prompts the way a buyer types them at 11pm, not keywords. (2) Run them logged out. (3) Read the sources, not the answer: the threads cited are the targets; if a competitor is in three and you are in none, that is the whole problem. (4) Ask the model which sub-questions it would search first and check their sources too: less contested threads. (5) The owner comments as themselves: who they are in the first line, a real answer including when their product is the wrong choice; one thread every 2 or 3 days; an account warmed up first (some karma, a few days of genuine comments, each subreddit's rules read). Pick subreddits Google already ranks on the site's best keywords (`serp-mix.mjs`), not the biggest ones.
 

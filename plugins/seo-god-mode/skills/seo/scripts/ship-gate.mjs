@@ -9,13 +9,19 @@
 // The sitemap check matters once an agent publishes outside a CMS: nothing warns you when the sitemap stops
 // listing new pages, and Google quietly stops learning what exists.
 // Exit code: 0 pass, 1 blocking regression (needs explicit owner approval), 3 warnings only,
-//            2 nothing checked (no built page matched --dist/--paths).
+//            2 nothing checked (no built page matched --dist/--paths, or a --before/--after URL is not a 200).
 import fs from "node:fs";
 import path from "node:path";
-import { parseArgs, loadConfig, fetchText, signature, sitemapUrls, table, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, fetchText, signature, sitemapUrls, urlKey, table, emit, die } from "./lib.mjs";
 
 const args = parseArgs();
-const load = async (src, url) => (/^https?:/.test(src) ? (await fetchText(src)).text : fs.readFileSync(src, "utf8"));
+// An error page as "before" would make every loss invisible: a fetch that is not a 200 stops the gate.
+const load = async (src) => {
+  if (!/^https?:/.test(src)) return fs.readFileSync(src, "utf8");
+  const r = await fetchText(src);
+  if (r.status !== 200) die(`${src} returned ${r.status || r.error}: nothing to compare.`, 2);
+  return r.text;
+};
 
 function compare(a, b, label) {
   const block = [], warn = [];
@@ -45,6 +51,7 @@ function compare(a, b, label) {
 }
 
 const pathOf = (u) => { try { return new URL(u).pathname; } catch { return u; } };
+const absolute = (u, base) => { try { return new URL(u, base).href; } catch { return u; } };
 const noindex = (sig) => /noindex/i.test(sig.robots);
 let results = [];
 if (args.published) {
@@ -57,7 +64,7 @@ if (args.published) {
       const sig = signature(r.text, url);
       if (noindex(sig)) block.push("robots meta says noindex");
       if (!sig.canonical) warn.push("no canonical tag");
-      else if (pathOf(sig.canonical) !== pathOf(r.url)) block.push(`canonical points elsewhere: ${sig.canonical}`);
+      else if (urlKey(absolute(sig.canonical, r.url)) !== urlKey(r.url)) block.push(`canonical points elsewhere: ${sig.canonical}`);
       if (!listed.has(pathOf(url))) block.push(`not listed in the live sitemap (${cfg.sitemap})`);
       if (/noindex/i.test(r.headers["x-robots-tag"] || "")) block.push("X-Robots-Tag header says noindex");
     }
@@ -81,7 +88,10 @@ if (args.published) {
     const after = signature(fs.readFileSync(f, "utf8"), cfg.site + urlPath);
     const inMap = !maps.length || noindex(after) || built.has(urlPath);
     const live = await fetchText(cfg.site + urlPath);
-    if (live.status !== 200) { results.push({ label: urlPath, block: inMap ? [] : ["new page missing from the built sitemap"], warn: [`new page (live ${live.status})`] }); continue; }
+    // 404/410 live = a page this build adds. Anything else (5xx, timeout) means the live page could not be read,
+    // and an unread page must not pass as new.
+    if (live.status === 404 || live.status === 410) { results.push({ label: urlPath, block: inMap ? [] : ["new page missing from the built sitemap"], warn: [`new page (live ${live.status})`] }); continue; }
+    if (live.status !== 200) { results.push({ label: urlPath, block: [`live page unreadable (${live.status || live.error}): cannot compare, re-run`], warn: [] }); continue; }
     const r = compare(signature(live.text, cfg.site + urlPath), after, urlPath);
     if (!inMap) r.warn.push("not in the built sitemap");
     results.push(r);
@@ -95,8 +105,12 @@ if (args.published) {
   }
 } else {
   if (!args.before || !args.after) throw new Error("need --before and --after, or --dist");
-  const url = args.url || (/^https?:/.test(args.before) ? args.before : "");
-  results.push(compare(signature(await load(args.before), url), signature(await load(args.after), url), args.after));
+  const [before, after] = [await load(args.before), await load(args.after)];
+  // The page URL tells internal links from external ones. From files, fall back to the declared canonical.
+  const isUrl = (s) => /^https?:/.test(s);
+  const url = [args.url, args.before, args.after, signature(before).canonical, signature(after).canonical].find((u) => typeof u === "string" && isUrl(u)) || "";
+  if (!url) console.error("warning: no page URL (pass --url): every link counts as internal.");
+  results.push(compare(signature(before, url), signature(after, url), args.after));
 }
 const blocked = results.filter((r) => r.block.length), warned = results.filter((r) => !r.block.length && r.warn.length);
 let md = `## Ship gate — ${results.length} page(s): ${blocked.length} blocked, ${warned.length} with warnings\n\n`;
