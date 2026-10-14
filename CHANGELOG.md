@@ -4,6 +4,20 @@ All notable changes to SEO God Mode are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-10-14
+
+### Fixed
+
+- `drop --start A --end B` compared against a reference window shifted by the default 7 days, overlapping the current one (a 28-day window overlapped by 21 days), so every change was wrong. Windows now carry their real length everywhere (`period()`), `--vs weeks:N` is validated (`weeks:x` crashed, `weeks:0` compared a period with itself), and a shift shorter than the window stops with an explanation instead of overlapping.
+- `keywords.mjs` exited outside a project although its config is optional (the `try/catch` around `loadConfig` could never catch an exit).
+- `suggest.mjs`: one network error ended the run and lost the results; a 429 looked like "0 suggestions". Failed probes are now counted and reported. Grouping matched the seed case-sensitively, so a capitalised seed put every suggestion in "other".
+- `cwv`/`weekly`: when PageSpeed falls back to origin-level field data, the result says so instead of showing it as the URL's.
+- A missing `sitemap` in the config gives a clear message in `audit`, `internal-links`, `twins`, `prune`, `index-status` and `ship-gate --published`; bad `--filter`, `--start` after `--end` and missing arguments print a usage line instead of a stack trace.
+
+### Changed
+
+- The ship gate's rules, the prune classification (including the 600-word deletion veto) and the twins similarity live in `lib.mjs` as pure functions, unit-tested in CI with date windows and the CTR curve.
+
 ## [1.1.2] - 2026-10-14
 
 ### Fixed

@@ -4,7 +4,7 @@
 // Rows with a date dimension are listed chronologically unless --sort is given.
 // With a host filter on a domain property, totals are page-level (a query counts once per page shown), so they can exceed --host all totals.
 // Filters: dim~regex (includingRegex), dim!~regex (excludingRegex), dim=value (equals), dim*=text (contains).
-import { parseArgs, loadConfig, gsc, gscObjects, period, previousWindow, queryClass, table, fmt, pct, signed, delta, short, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, die, gsc, gscObjects, period, previousWindow, queryClass, table, fmt, pct, signed, delta, short, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
@@ -12,7 +12,7 @@ const dims = String(args.dims || "query").split(",");
 const win = period(args, 28);
 const filters = [].concat(args.filter || []).map((f) => {
   const m = f.match(/^(\w+)(!~|~|\*=|=)(.*)$/);
-  if (!m) throw new Error("bad filter " + f);
+  if (!m) die(`Bad --filter "${f}": use dim~regex, dim!~regex, dim=value or dim*=text (e.g. "query~^how").`);
   const op = { "~": "includingRegex", "!~": "excludingRegex", "*=": "contains", "=": "equals" }[m[2]];
   return { dimension: m[1], operator: op, expression: m[3] };
 });

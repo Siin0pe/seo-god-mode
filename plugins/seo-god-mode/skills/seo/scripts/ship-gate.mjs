@@ -12,7 +12,7 @@
 //            2 nothing checked (no built page matched --dist/--paths, or a --before/--after URL is not a 200).
 import fs from "node:fs";
 import path from "node:path";
-import { parseArgs, loadConfig, fetchText, signature, sitemapUrls, urlKey, table, emit, die } from "./lib.mjs";
+import { parseArgs, loadConfig, fetchText, signature, sitemapUrls, requireSitemap, urlKey, gateCompare, table, emit, die } from "./lib.mjs";
 
 const args = parseArgs();
 // An error page as "before" would make every loss invisible: a fetch that is not a 200 stops the gate.
@@ -23,32 +23,6 @@ const load = async (src) => {
   return r.text;
 };
 
-function compare(a, b, label) {
-  const block = [], warn = [];
-  for (const [k, v] of Object.entries(a.elements)) if ((b.elements[k] ?? 0) < v) (["form", "input", "table", "video", "details", "canvas"].includes(k) ? block : warn).push(`${k}: ${v} → ${b.elements[k] ?? 0}`);
-  const lostLd = a.jsonLd.filter((t) => !b.jsonLd.includes(t));
-  if (lostLd.length) block.push(`JSON-LD types removed: ${[...new Set(lostLd)].join(", ")}`);
-  if (b.jsonLd.includes("INVALID_JSON")) block.push("JSON-LD does not parse");
-  if (a.canonical !== b.canonical) block.push(`canonical: ${a.canonical || "∅"} → ${b.canonical || "∅"}`);
-  if (a.robots !== b.robots) block.push(`robots meta: "${a.robots}" → "${b.robots}"`);
-  const lostHl = a.hreflang.filter((h) => !b.hreflang.includes(h));
-  if (lostHl.length) block.push(`hreflang removed: ${lostHl.join(", ")}`);
-  if (a.lang !== b.lang) block.push(`html lang: ${a.lang} → ${b.lang}`);
-  if (b.h1.length !== 1) warn.push(`H1 count is ${b.h1.length}`);
-  if (a.words && b.words < a.words * 0.7) block.push(`words: ${a.words} → ${b.words} (−${Math.round((1 - b.words / a.words) * 100)}%)`);
-  else if (a.words && b.words < a.words * 0.9) warn.push(`words: ${a.words} → ${b.words}`);
-  if (a.title !== b.title) warn.push(`title changed: "${a.title}" → "${b.title}" (needs approval if the page gets clicks)`);
-  if (a.description !== b.description) warn.push("meta description changed");
-  if (a.h1[0] !== b.h1[0]) warn.push(`H1: "${a.h1[0]}" → "${b.h1[0]}"`);
-  const lostH2 = a.h2.filter((h) => !b.h2.includes(h));
-  if (lostH2.length) warn.push(`H2 removed: ${lostH2.slice(0, 6).join(" | ")}`);
-  if (b.internalLinks < a.internalLinks * 0.8) warn.push(`internal links: ${a.internalLinks} → ${b.internalLinks}`);
-  const lostTargets = a.internalTargets.filter((t) => !b.internalTargets.includes(t));
-  if (lostTargets.length) warn.push(`internal link targets dropped: ${lostTargets.slice(0, 5).join(", ")}`);
-  if (!b.description) warn.push("no meta description");
-  if (b.title.length > 65) warn.push(`title ${b.title.length} chars (may truncate)`);
-  return { label, block, warn };
-}
 
 const pathOf = (u) => { try { return new URL(u).pathname; } catch { return u; } };
 const absolute = (u, base) => { try { return new URL(u, base).href; } catch { return u; } };
@@ -56,7 +30,7 @@ const noindex = (sig) => /noindex/i.test(sig.robots);
 let results = [];
 if (args.published) {
   const cfg = loadConfig(args);
-  const listed = new Set((await sitemapUrls(cfg.sitemap)).map((u) => pathOf(u.loc)));
+  const listed = new Set((await sitemapUrls(requireSitemap(cfg))).map((u) => pathOf(u.loc)));
   for (const url of String(args.published).split(",")) {
     const r = await fetchText(url), block = [], warn = [];
     if (r.status !== 200) block.push(`HTTP ${r.status}`);
@@ -92,7 +66,7 @@ if (args.published) {
     // and an unread page must not pass as new.
     if (live.status === 404 || live.status === 410) { results.push({ label: urlPath, block: inMap ? [] : ["new page missing from the built sitemap"], warn: [`new page (live ${live.status})`] }); continue; }
     if (live.status !== 200) { results.push({ label: urlPath, block: [`live page unreadable (${live.status || live.error}): cannot compare, re-run`], warn: [] }); continue; }
-    const r = compare(signature(live.text, cfg.site + urlPath), after, urlPath);
+    const r = gateCompare(signature(live.text, cfg.site + urlPath), after, urlPath);
     if (!inMap) r.warn.push("not in the built sitemap");
     results.push(r);
   }
@@ -104,13 +78,13 @@ if (args.published) {
     process.exit(2);
   }
 } else {
-  if (!args.before || !args.after) throw new Error("need --before and --after, or --dist");
+  if (!args.before || !args.after) die("Usage: ship-gate.mjs --before <url|file> --after <url|file> | --dist <dir> | --published <urls> (see --help)");
   const [before, after] = [await load(args.before), await load(args.after)];
   // The page URL tells internal links from external ones. From files, fall back to the declared canonical.
   const isUrl = (s) => /^https?:/.test(s);
   const url = [args.url, args.before, args.after, signature(before).canonical, signature(after).canonical].find((u) => typeof u === "string" && isUrl(u)) || "";
   if (!url) console.error("warning: no page URL (pass --url): every link counts as internal.");
-  results.push(compare(signature(before, url), signature(after, url), args.after));
+  results.push(gateCompare(signature(before, url), signature(after, url), args.after));
 }
 const blocked = results.filter((r) => r.block.length), warned = results.filter((r) => !r.block.length && r.warn.length);
 let md = `## Ship gate — ${results.length} page(s): ${blocked.length} blocked, ${warned.length} with warnings\n\n`;

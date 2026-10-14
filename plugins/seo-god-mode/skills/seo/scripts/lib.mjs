@@ -69,8 +69,9 @@ process.on("uncaughtException", (e) => {
 });
 
 // ---------- Config ----------
-// Looked up from the cwd upwards: .seo/config.json. --config overrides.
-export function loadConfig(args = {}) {
+// Looked up from the cwd upwards: .seo/config.json. --config overrides. With { optional: true } a missing
+// config returns {} instead of exiting (scripts that work without a project, like keywords.mjs).
+export function loadConfig(args = {}, { optional = false } = {}) {
   let file = args.config;
   if (!file) {
     let dir = process.cwd();
@@ -82,6 +83,7 @@ export function loadConfig(args = {}) {
       dir = up;
     }
   }
+  if (!file && optional) return {};
   if (!file) die("No .seo/config.json found from the current directory upwards. Run /seo-god-mode:setup (or `node scripts/setup.mjs --site <url>`).");
   const cfg = JSON.parse(fs.readFileSync(file, "utf8"));
   cfg._file = file;
@@ -115,6 +117,10 @@ export function queryClass(cfg, q) {
   for (const [k, re] of cfg.classRegex) if (re.test(q)) return k;
   return "generic";
 }
+export function requireSitemap(cfg) {
+  if (!cfg.sitemap) die('No "sitemap" in .seo/config.json: add the sitemap URL (or re-run setup.mjs --sitemap <url>).');
+  return cfg.sitemap;
+}
 export function cachePath(cfg, name) {
   const dir = path.join(cfg._dir, "cache");
   fs.mkdirSync(dir, { recursive: true });
@@ -127,10 +133,12 @@ export const addDays = (dateStr, n) => iso(new Date(new Date(dateStr + "T00:00:0
 export const today = () => iso(new Date());
 // Search Console final data lags ~2-3 days. Default analysis windows end 3 days ago.
 export const lastFinalDay = () => addDays(today(), -3);
+// days is the real length of the window, also when --start sets it.
 export function period(args, defDays = 28) {
   const end = args.end || lastFinalDay();
-  const days = Number(args.days || defDays);
-  const start = args.start || addDays(end, -(days - 1));
+  const start = args.start || addDays(end, -(Number(args.days || defDays) - 1));
+  const days = Math.round((new Date(end) - new Date(start)) / 86400000) + 1;
+  if (!(days >= 1)) die(`Invalid window ${start} → ${end}: --start must be on or before --end (YYYY-MM-DD).`);
   return { start, end, days };
 }
 export function previousWindow({ start, end }) {
@@ -236,8 +244,10 @@ export async function pagespeed(cfg, url, strategy = "mobile") {
   if (j.error) return { url, error: j.error.message };
   const m = j.loadingExperience?.metrics || {};
   const p = (k) => m[k]?.percentile;
+  // Without enough data for the URL, PSI fills loadingExperience with the origin's: say so.
+  const fallback = j.loadingExperience?.origin_fallback ? " (origin data, none for this URL)" : "";
   return {
-    url, field: j.loadingExperience?.overall_category || "NO_FIELD_DATA", origin: j.originLoadingExperience?.overall_category || "NO_FIELD_DATA",
+    url, field: (j.loadingExperience?.overall_category || "NO_FIELD_DATA") + fallback, origin: j.originLoadingExperience?.overall_category || "NO_FIELD_DATA",
     lcpMs: p("LARGEST_CONTENTFUL_PAINT_MS"), inpMs: p("INTERACTION_TO_NEXT_PAINT"), cls: p("CUMULATIVE_LAYOUT_SHIFT_SCORE") != null ? p("CUMULATIVE_LAYOUT_SHIFT_SCORE") / 100 : undefined, ttfbMs: p("EXPERIMENTAL_TIME_TO_FIRST_BYTE"),
     labScore: Math.round((j.lighthouseResult?.categories?.performance?.score ?? 0) * 100),
     labLcpMs: Math.round(j.lighthouseResult?.audits?.["largest-contentful-paint"]?.numericValue ?? 0), labCls: j.lighthouseResult?.audits?.["cumulative-layout-shift"]?.numericValue,
@@ -339,6 +349,49 @@ export function signature(html, pageUrl = "") {
     anchors: internal,
   };
 }
+
+// ---------- Checks shared by scripts (pure, unit-tested in CI) ----------
+/** Ship gate: what a change from signature a to signature b loses. block = needs the owner's approval. */
+export function gateCompare(a, b, label) {
+  const block = [], warn = [];
+  for (const [k, v] of Object.entries(a.elements)) if ((b.elements[k] ?? 0) < v) (["form", "input", "table", "video", "details", "canvas"].includes(k) ? block : warn).push(`${k}: ${v} → ${b.elements[k] ?? 0}`);
+  const lostLd = a.jsonLd.filter((t) => !b.jsonLd.includes(t));
+  if (lostLd.length) block.push(`JSON-LD types removed: ${[...new Set(lostLd)].join(", ")}`);
+  if (b.jsonLd.includes("INVALID_JSON")) block.push("JSON-LD does not parse");
+  if (a.canonical !== b.canonical) block.push(`canonical: ${a.canonical || "∅"} → ${b.canonical || "∅"}`);
+  if (a.robots !== b.robots) block.push(`robots meta: "${a.robots}" → "${b.robots}"`);
+  const lostHl = a.hreflang.filter((h) => !b.hreflang.includes(h));
+  if (lostHl.length) block.push(`hreflang removed: ${lostHl.join(", ")}`);
+  if (a.lang !== b.lang) block.push(`html lang: ${a.lang} → ${b.lang}`);
+  if (b.h1.length !== 1) warn.push(`H1 count is ${b.h1.length}`);
+  if (a.words && b.words < a.words * 0.7) block.push(`words: ${a.words} → ${b.words} (−${Math.round((1 - b.words / a.words) * 100)}%)`);
+  else if (a.words && b.words < a.words * 0.9) warn.push(`words: ${a.words} → ${b.words}`);
+  if (a.title !== b.title) warn.push(`title changed: "${a.title}" → "${b.title}" (needs approval if the page gets clicks)`);
+  if (a.description !== b.description) warn.push("meta description changed");
+  if (a.h1[0] !== b.h1[0]) warn.push(`H1: "${a.h1[0]}" → "${b.h1[0]}"`);
+  const lostH2 = a.h2.filter((h) => !b.h2.includes(h));
+  if (lostH2.length) warn.push(`H2 removed: ${lostH2.slice(0, 6).join(" | ")}`);
+  if (b.internalLinks < a.internalLinks * 0.8) warn.push(`internal links: ${a.internalLinks} → ${b.internalLinks}`);
+  const lostTargets = a.internalTargets.filter((t) => !b.internalTargets.includes(t));
+  if (lostTargets.length) warn.push(`internal link targets dropped: ${lostTargets.slice(0, 5).join(", ")}`);
+  if (!b.description) warn.push("no meta description");
+  if (b.title.length > 65) warn.push(`title ${b.title.length} chars (may truncate)`);
+  return { label, block, warn };
+}
+/** Prune: the action for one page. Pages of 600+ words are never deletion candidates (veto in code). */
+export function pruneAction({ status, noindex, young, seen, clicks, impressions, position, words, minImpr }) {
+  if (status !== 200) return `fix: HTTP ${status} in sitemap`;
+  if (noindex) return "fix: noindex page listed in sitemap";
+  if (young) return "too young: leave it";
+  if (!seen) return "check: no impression in 16 months and no lastmod (confirm the publish date)";
+  if (clicks > 0 || impressions >= minImpr) return position && position > 10 ? "improve (has demand, ranks deep)" : "keep";
+  if (words >= 600) return "improve or merge (substantial page: deletion vetoed)";
+  return "merge/redirect or rewrite candidate (owner decides)";
+}
+/** Twins: main-content words, accents folded ("réseau" → "reseau"), and their 5-word shingles. */
+export const contentWords = (html) => mainHtml(html).replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "").replace(/[^\p{L}\p{N}\s]+/gu, " ").split(/\s+/).filter(Boolean);
+export const shingles = (w, n = 5) => { const s = new Set(); for (let i = 0; i + n <= w.length; i++) s.add(w.slice(i, i + n).join(" ")); return s; };
+export const jaccard = (a, b) => { let i = 0; for (const x of a) if (b.has(x)) i++; return i / (a.size + b.size - i || 1); };
 
 // ---------- robots.txt ----------
 /** Parses robots.txt into groups [{agents:[...], rules:[{allow:bool, path}]}]. */

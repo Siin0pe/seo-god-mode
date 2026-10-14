@@ -3,12 +3,11 @@
 // why, and a ranked list of URLs to request manually in the Search Console UI (~10/day quota there).
 // Usage: node index-status.mjs [--limit 300] [--fresh] [--only /path-prefix] [--json]
 import fs from "node:fs";
-import { parseArgs, loadConfig, sitemapUrls, inspectUrl, gsc, gscObjects, period, cachePath, today, pool, table, fmt, short, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, sitemapUrls, requireSitemap, inspectUrl, gsc, gscObjects, period, cachePath, today, pool, table, fmt, short, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
-if (!cfg.sitemap) throw new Error('"sitemap" missing in config');
-let urls = (await sitemapUrls(cfg.sitemap)).map((u) => u.loc);
+let urls = (await sitemapUrls(requireSitemap(cfg))).map((u) => u.loc);
 if (args.only) urls = urls.filter((u) => u.includes(args.only));
 urls = urls.slice(0, Number(args.limit || 300));
 const file = cachePath(cfg, `inspect-${today()}.json`);
