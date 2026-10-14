@@ -4,6 +4,10 @@ All notable changes to SEO God Mode are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- **Crawler visits** (`crawlers.mjs`): requests per search and AI crawler (Googlebot, bingbot, Applebot, OAI-SearchBot, ChatGPT-User, Claude-SearchBot, Claude-User, PerplexityBot, Perplexity-User, GPTBot, ClaudeBot, CCBot, meta-externalagent, Bytespider), status split, top paths, set against robots.txt (crawlers that ignore a Disallow, search crawlers hitting errors), and with `--sitemap` the sitemap pages Googlebot did not fetch. Sources: Cloudflare GraphQL Analytics (30 days, any plan; `CLOUDFLARE_API_TOKEN` + config `cloudflare.zoneId`) or log files (Vercel Log Drain JSON, JSON logs, combined access logs, `.gz`). `setup.mjs` detects the host from the home page: behind Cloudflare it finds the zone once `CLOUDFLARE_API_TOKEN` is set, elsewhere `--logs <file or folder>` saves where the logs are; optional steps are listed apart from the blocking to-dos. `doctor` checks the access.
+
 ## [1.2.0] - 2026-10-14
 
 ### Added

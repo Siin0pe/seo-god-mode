@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 // ---------- CLI ----------
 // Repeatable options collect every value in an array ("--filter a --filter b"); any other option keeps its last
 // value. "--k=v" keeps any "=" inside v.
-const MULTI_ARGS = new Set(["filter"]);
+const MULTI_ARGS = new Set(["filter", "file"]);
 export function parseArgs(argv = process.argv.slice(2)) {
   const out = { _: [] };
   const set = (k, v) => { out[k] = MULTI_ARGS.has(k) ? [].concat(out[k] ?? [], v) : v; };
@@ -482,6 +482,52 @@ export function rootAllowed(groups, agent) {
   return hits.length ? hits[0].allow : true;
 }
 export const CRAWLERS = { search: ["Googlebot", "Bingbot"], aiRetrieval: ["OAI-SearchBot", "ChatGPT-User", "Claude-SearchBot", "Claude-User", "PerplexityBot", "Perplexity-User"], aiTraining: ["GPTBot", "ClaudeBot", "Google-Extended", "CCBot", "Applebot-Extended", "meta-externalagent", "Bytespider"] };
+
+// ---------- Crawler visits (server logs, Cloudflare) ----------
+// The tokens that appear in user agents. Google-Extended and Applebot-Extended are robots.txt tokens only:
+// they never show up in logs. A user agent can be spoofed: without reverse-DNS or bot management, counts
+// are "requests claiming to be X".
+export const CRAWLER_UAS = [
+  ["Googlebot", "search"], ["bingbot", "search"], ["Applebot", "search"],
+  ["OAI-SearchBot", "aiRetrieval"], ["ChatGPT-User", "aiRetrieval"], ["Claude-SearchBot", "aiRetrieval"], ["Claude-User", "aiRetrieval"], ["PerplexityBot", "aiRetrieval"], ["Perplexity-User", "aiRetrieval"],
+  ["GPTBot", "aiTraining"], ["ClaudeBot", "aiTraining"], ["CCBot", "aiTraining"], ["meta-externalagent", "aiTraining"], ["Bytespider", "aiTraining"],
+];
+export function crawlerOf(ua = "") {
+  const u = ua.toLowerCase();
+  return CRAWLER_UAS.find(([n]) => u.includes(n.toLowerCase()))?.[0] || null;
+}
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+/** One log line → { ua, path, status, time (ISO) } or null. Reads Vercel Log Drain JSON (proxy.*), generic JSON
+ *  logs and the combined access-log format of nginx/Apache/most hosts. */
+export function parseLogLine(line) {
+  const s = line.trim();
+  if (!s) return null;
+  if (s.startsWith("{")) {
+    let j; try { j = JSON.parse(s); } catch { return null; }
+    const p = j.proxy || {};
+    const ua = [].concat(p.userAgent ?? j.userAgent ?? j.user_agent ?? j.http_user_agent ?? j.ua ?? "").join(" ");
+    let pathname = p.path ?? j.path ?? j.requestPath ?? j.url ?? j.request_uri ?? "";
+    try { if (/^https?:/.test(pathname)) pathname = new URL(pathname).pathname; } catch {}
+    const ts = p.timestamp ?? j.timestamp ?? j.time ?? j.date;
+    const time = ts == null ? null : new Date(typeof ts === "number" && ts < 1e12 ? ts * 1000 : ts);
+    return { ua, path: String(pathname).split("?")[0], status: Number(p.statusCode ?? j.statusCode ?? j.status ?? 0), time: time && !isNaN(time) ? time.toISOString() : null };
+  }
+  const m = s.match(/\[(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2}) ([+-]\d{4})\] "(?:[A-Z]+) ([^ "]+)[^"]*" (\d{3}) \S+(?: "[^"]*" "([^"]*)")?/);
+  if (!m) return null;
+  const [, d, mon, y, H, M, S, tz, reqPath, status, ua = ""] = m;
+  const off = (tz[0] === "-" ? -1 : 1) * (Number(tz.slice(1, 3)) * 60 + Number(tz.slice(3)));
+  const t = Date.UTC(+y, MONTHS[mon.toLowerCase()], +d, +H, +M, +S) - off * 60000;
+  return { ua, path: reqPath.split("?")[0], status: Number(status), time: new Date(t).toISOString() };
+}
+/** Cloudflare GraphQL Analytics (token with Account Analytics: Read). Throws SourceError on API errors. */
+export async function cloudflareGraphql(query, variables) {
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!token) throw new SourceError(missingText("Cloudflare API token", "Create a token with Account → Account Analytics → Read (zone resources: the site's zone) and set CLOUDFLARE_API_TOKEN."), 2);
+  const j = await apiJson("https://api.cloudflare.com/client/v4/graphql", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify({ query, variables }) });
+  if (j.error) throw new SourceError("Cloudflare error: " + j.error.message);
+  if (j.errors?.length) throw new SourceError("Cloudflare GraphQL error: " + j.errors.map((e) => e.message).join("; "));
+  return j.data;
+}
 
 // ---------- Output ----------
 export const fmt = (n, d = 0) => (n == null || Number.isNaN(n) ? "—" : Number(n).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d }));
