@@ -8,7 +8,8 @@
 //   node ship-gate.mjs --published <url,url>   after deploy: 200, indexable, self-canonical, listed in the live sitemap
 // The sitemap check matters once an agent publishes outside a CMS: nothing warns you when the sitemap stops
 // listing new pages, and Google quietly stops learning what exists.
-// Exit code: 0 pass, 1 blocking regression (needs explicit owner approval), 3 warnings only.
+// Exit code: 0 pass, 1 blocking regression (needs explicit owner approval), 3 warnings only,
+//            2 nothing checked (no built page matched --dist/--paths).
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs, loadConfig, fetchText, signature, sitemapUrls, table, emit } from "./lib.mjs";
@@ -67,7 +68,8 @@ if (args.published) {
   const files = [];
   const walk = (d) => { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); if (fs.statSync(p).isDirectory()) walk(p); else if (f === "index.html") files.push(p); } };
   walk(args.dist);
-  let pathsOnly = args.paths ? String(args.paths).split(",") : null;
+  // Normalise "/a" → "/a/" and "a/" → "/a/": built pages are compared as /dir/ paths.
+  let pathsOnly = args.paths ? String(args.paths).split(",").map((p) => ("/" + p.trim().replace(/^\/+|\/+$/g, "") + "/").replace(/^\/\/$/, "/")) : null;
   // Sitemaps produced by the build: every indexable page should be in one of them.
   const maps = fs.readdirSync(args.dist).filter((f) => /^sitemap.*\.xml$/i.test(f));
   const built = new Set(maps.flatMap((f) => [...fs.readFileSync(path.join(args.dist, f), "utf8").matchAll(/<loc>\s*([^<\s]+)/gi)].map((m) => m[1])).filter((u) => !/sitemap.*\.xml$/i.test(u)).map(pathOf));
@@ -83,6 +85,13 @@ if (args.published) {
     const r = compare(signature(live.text, cfg.site + urlPath), after, urlPath);
     if (!inMap) r.warn.push("not in the built sitemap");
     results.push(r);
+  }
+  // A gate that checked nothing must not look like a pass.
+  const checked = results.filter((r) => r.label !== "(build)").length;
+  const missingPaths = pathsOnly ? pathsOnly.filter((p) => !results.some((r) => r.label === p)) : [];
+  if (!checked || missingPaths.length) {
+    console.error(`Ship gate checked ${checked} page(s). ${missingPaths.length ? `No built page for: ${missingPaths.join(", ")}. ` : ""}Check --dist (${args.dist}) and --paths (URL paths like /learn/, comma-separated).`);
+    process.exit(2);
   }
 } else {
   if (!args.before || !args.after) throw new Error("need --before and --after, or --dist");
