@@ -4,7 +4,7 @@
 // Usage: node weekly.mjs [--end YYYY-MM-DD] [--no-cwv] [--json]
 import fs from "node:fs";
 import path from "node:path";
-import { parseArgs, loadConfig, gsc, gscObjects, ga4, pagespeed, period, previousWindow, queryClass, table, fmt, pct, signed, delta, short, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, gsc, gscObjects, ga4, pagespeed, cruxKey, cruxHistory, cwvTrend, period, previousWindow, queryClass, table, fmt, pct, signed, delta, short, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
@@ -42,7 +42,12 @@ if (cfg.ga4Property) {
 const cacheDir = path.join(cfg._dir, "cache");
 const inspect = fs.existsSync(cacheDir) ? fs.readdirSync(cacheDir).filter((f) => f.startsWith("inspect-")).sort().pop() : null;
 if (inspect) { const c = Object.values(JSON.parse(fs.readFileSync(path.join(cacheDir, inspect), "utf8"))); md += `\n\n## Index coverage (${inspect.slice(8, 18)})\n\n${c.filter((r) => r.verdict === "PASS").length}/${c.length} sitemap URLs indexed. Re-run index-status.mjs if older than a week.`; }
-if (!args["no-cwv"]) { md += "\n\n## Core Web Vitals (mobile, CrUX p75)\n\n"; const rows = []; for (const u of cfg.cwvUrls?.length ? cfg.cwvUrls : [cfg.site + "/"]) { const r = await pagespeed(cfg, u); rows.push(r.error ? [u, r.error, "", "", ""] : [u, r.field, r.lcpMs ?? "—", r.inpMs ?? "—", r.cls ?? "—"]); } md += table(["url", "field", "LCP", "INP", "CLS"], rows); }
+if (!args["no-cwv"]) { md += "\n\n## Core Web Vitals (mobile, CrUX p75)\n\n"; const rows = []; for (const u of cfg.cwvUrls?.length ? cfg.cwvUrls : [cfg.site + "/"]) { const r = await pagespeed(cfg, u); rows.push(r.error ? [u, r.error, "", "", ""] : [u, r.field, r.lcpMs ?? "—", r.inpMs ?? "—", r.cls ?? "—"]); } md += table(["url", "field", "LCP", "INP", "CLS"], rows);
+  if (cruxKey(cfg)) {
+    const h = await cruxHistory(cfg, cfg.site, { origin: true, weeks: 13 });
+    if (!h.error) { const t = cwvTrend(h); const f = (k, v) => (v == null ? "—" : k === "cls" ? v.toFixed(2) : Math.round(v)); md += `\n\nOrigin trend (CrUX p75, now vs 12 weeks ago): ${["lcp", "inp", "cls"].map((k) => `${k.toUpperCase()} ${f(k, t[k].latest)} vs ${f(k, t[k].w12)}${t[k].crossed ? ` (${t[k].crossed.to} since ${t[k].crossed.week})` : ""}`).join(", ")}.`; }
+  }
+}
 md += "\n\n## Reading\n\n_(to write: what changed and why, checked against seasonality and the change log)_\n\n## Actions (max 3)\n\n1. \n2. \n3. \n";
 const out = path.join(cfg._dir, "reports", `${week}${args.host ? "-" + args.host.replace(/[^\w.-]/g, "") : ""}.md`);
 fs.mkdirSync(path.dirname(out), { recursive: true });

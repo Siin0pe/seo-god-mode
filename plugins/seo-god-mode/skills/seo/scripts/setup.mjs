@@ -55,6 +55,7 @@ else {
                 https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com
                 https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com
                 https://console.cloud.google.com/apis/library/pagespeedonline.googleapis.com
+                https://console.cloud.google.com/apis/library/chromeuxreport.googleapis.com
      3. https://console.cloud.google.com/iam-admin/serviceaccounts → Create → Keys → Add key → JSON
      4. Save it outside any repo, e.g. ${path.join(os.homedir(), ".config", "google-sa-seo.json")}`);
 }

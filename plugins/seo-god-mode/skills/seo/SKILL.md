@@ -35,7 +35,7 @@ The user may type `/seo-god-mode:seo <command>` or just ask. Map the request to 
 | `audit` | Technical issues ranked by severity, robots/AI-crawler policy, hreflang | `scripts/audit.mjs` |
 | `index` | What is indexed, what isn't and why, the request order for today | `scripts/index-status.mjs` |
 | `links` | Orphans, pages under 5 contextual in-links, which pages to link from and with which anchor | `scripts/internal-links.mjs` |
-| `cwv` | Core Web Vitals field (CrUX) and lab | `scripts/cwv.mjs [url...]` |
+| `cwv` | Core Web Vitals field (CrUX) and lab; `--history`: weekly p75 over up to 40 weeks, the week a metric crossed its threshold | `scripts/cwv.mjs [url...] [--history]` |
 | `gate` | Did this change silently remove something? Run before any publish; `--published <url>` after it (live, indexable, in the sitemap) | `scripts/ship-gate.mjs` |
 | `twins` | Pattern pages that are a find-and-replace of each other (doorway risk) | `scripts/twins.mjs [--pattern "^/city/"]` |
 | `serp-mix` | Which queries leave room beyond your site (videos, Reddit, platforms, lists), which subreddits rank, which lists miss you (DataForSEO) | `scripts/serp-mix.mjs` |

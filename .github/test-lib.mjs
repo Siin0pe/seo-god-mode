@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { unmangleMsys, msysRoots, parseArgs, parseRobots, rootAllowed, robotsMatch, onHost, hostPattern, regDomainOf, urlKey, signature, period, previousWindow, ctrCurve, expectedCtr, DEFAULT_CTR, delta, signed, gateCompare, pruneAction, contentWords, shingles, jaccard } from "../plugins/seo-god-mode/skills/seo/scripts/lib.mjs";
+import { unmangleMsys, msysRoots, parseArgs, parseRobots, rootAllowed, robotsMatch, onHost, hostPattern, regDomainOf, urlKey, signature, period, previousWindow, ctrCurve, expectedCtr, DEFAULT_CTR, delta, signed, gateCompare, pruneAction, contentWords, shingles, jaccard, cwvTrend, sitemapIssues } from "../plugins/seo-god-mode/skills/seo/scripts/lib.mjs";
 
 const scripts = path.join(path.dirname(fileURLToPath(import.meta.url)), "../plugins/seo-god-mode/skills/seo/scripts");
 
@@ -104,6 +104,25 @@ const body = "we install and repair heat pumps for homes and small offices with 
 const sa = shingles(contentWords(`<main>${body} in austin</main>`)), sb = shingles(contentWords(`<main>${body} in dallas</main>`));
 assert.ok(jaccard(sa, sb) >= 0.8);
 assert.ok(jaccard(sa, shingles(contentWords("<main>a completely different page about something else entirely with many other words</main>"))) < 0.1);
+
+// CrUX history trend: values N weeks back, and the last week a metric crossed its threshold.
+const tr = cwvTrend({ weeks: ["w1", "w2", "w3", "w4", "w5"], p75: { lcp: [2000, 2100, 2600, 2700, 2800], inp: [null, 150, 180, 190, 210], cls: [0.05, 0.05, 0.05, 0.05, 0.05], ttfb: [] } });
+assert.equal(tr.lcp.latest, 2800);
+assert.equal(tr.lcp.w4, 2000);
+assert.equal(tr.lcp.w12, null);
+assert.deepEqual(tr.lcp.crossed, { week: "w3", to: "not good" });
+assert.deepEqual(tr.inp.crossed, { week: "w5", to: "not good" });
+assert.equal(tr.cls.crossed, null);
+assert.equal(tr.ttfb.latest, null);
+
+// Sitemaps as Google sees them.
+const now = new Date("2026-10-14T00:00:00Z");
+const sm = [{ path: "https://x.test/sitemap.xml", lastDownloaded: "2026-10-12T00:00:00Z", pending: false, errors: 0 }, { path: "https://x.test/old.xml", lastDownloaded: "2026-09-01T00:00:00Z", pending: false, errors: 2 }];
+assert.deepEqual(sitemapIssues(sm.slice(0, 1), "https://x.test/sitemap.xml", now), []);
+const si = sitemapIssues(sm, "https://x.test/new.xml", now);
+assert.ok(si.some((i) => i.includes("new.xml is not submitted")));
+assert.ok(si.some((i) => i.includes("old.xml: 2 error")));
+assert.ok(si.some((i) => i.includes("old.xml: last read by Google 43 days ago")));
 
 // Ship gate, end to end on files.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "seo-gate-"));
