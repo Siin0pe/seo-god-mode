@@ -7,35 +7,20 @@
 //        --location locations/123 [--account accounts/456] override config "gbp" (one location per project)
 // Needs Business Profile API access approved by Google, OAuth set up once with gbp-auth.mjs and GBP_OAUTH set.
 // Performance data lags: the default window ends 3 days ago.
-import { parseArgs, loadConfig, die, gbpToken, gbpFetch, gbpSeries, gbpTotals, gbpKeywordValue, gbpReviewStats, gbpDateParams, gbpMonths, period, previousWindow, addDays, today, table, fmt, pct, delta, signed, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, die, gbpToken, gbpFetch, gbpLocations, gbpMatches, gbpSeries, gbpTotals, gbpKeywordValue, gbpReviewStats, gbpDateParams, gbpMonths, period, previousWindow, addDays, today, table, fmt, pct, delta, signed, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args, { optional: true });
 const cmd = args._[0];
 if (!["locations", "performance", "keywords", "reviews"].includes(cmd)) die("Usage: node gbp.mjs locations|performance|keywords|reviews [--location locations/123] (see --help)");
 await gbpToken(cfg); // fail fast with the setup steps
-const AM = "https://mybusinessaccountmanagement.googleapis.com/v1", BI = "https://mybusinessbusinessinformation.googleapis.com/v1", PERF = "https://businessprofileperformance.googleapis.com/v1";
+const PERF = "https://businessprofileperformance.googleapis.com/v1";
 const opt = (v) => (v && v !== true ? String(v) : "");
 const norm = (v, kind) => (v && !v.startsWith(kind + "/") ? `${kind}/${v}` : v);
 const location = norm(opt(args.location) || cfg.gbp?.location || "", "locations");
 const hostOf = (u) => { try { return new URL(u).host.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
 
-async function pages(url, key, max = 20) {
-  const all = [];
-  let token = "";
-  for (let i = 0; i < max; i++) {
-    const j = await gbpFetch(cfg, url + (token ? `&pageToken=${encodeURIComponent(token)}` : ""));
-    all.push(...(j[key] || []));
-    if (!(token = j.nextPageToken)) break;
-  }
-  return all;
-}
-async function allLocations() {
-  const accounts = await pages(`${AM}/accounts?pageSize=20`, "accounts");
-  const rows = [];
-  for (const a of accounts) for (const l of await pages(`${BI}/${a.name}/locations?readMask=name,title,storefrontAddress,websiteUri&pageSize=100`, "locations")) rows.push({ ...l, account: a.name, accountName: a.accountName });
-  return { accounts, rows };
-}
+const allLocations = () => gbpLocations(cfg);
 function needLocation() {
   if (!location) die('No location: set "gbp": {"account": "accounts/..", "location": "locations/.."} in .seo/config.json (ids from `node gbp.mjs locations`) or pass --location locations/123.');
   return location;
@@ -44,7 +29,8 @@ function needLocation() {
 if (cmd === "locations") {
   const { accounts, rows } = await allLocations();
   const site = hostOf(cfg.site || "");
-  for (const r of rows) r.match = !!site && hostOf(r.websiteUri || "") === site;
+  const matches = new Set(gbpMatches(rows, cfg.site || ""));
+  for (const r of rows) r.match = matches.has(r);
   const md = `## Business Profile locations (${rows.length} in ${accounts.length} account(s))\n\n` + (rows.length ? table(["", "title", "location", "account", "website", "city"], rows.map((r) => [r.match ? "★ site" : r.name === location ? "config" : "", r.title, r.name, `${r.account}${r.accountName ? ` (${r.accountName})` : ""}`, r.websiteUri || "—", r.storefrontAddress?.locality || "—"])) : "No location visible to this Google account (it must own or manage the profile).") +
     `\n\nSet the project's location in .seo/config.json: "gbp": {"account": "accounts/…", "location": "locations/…"}` + (rows.some((r) => r.match) ? " (★ = website matches the config site)." : site ? `. No location links to ${site}.` : ".");
   emit(args, md, rows);

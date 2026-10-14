@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
 
 // ---------- CLI ----------
 // Repeatable options collect every value in an array ("--filter a --filter b"); any other option keeps its last
@@ -232,7 +233,9 @@ export async function ga4(cfg, { noHostFilter, ...body }) {
 
 // ---------- Google Business Profile (optional, OAuth user consent: service accounts are not supported) ----------
 export const GBP_PREREQS = "https://developers.google.com/my-business/content/prereqs";
-export const gbpOAuthPath = (cfg) => process.env.GBP_OAUTH || cfg?.credentials?.gbpOAuth;
+// Where gbp-auth.mjs writes by default, so setup finds it without an env var.
+export const GBP_OAUTH_DEFAULT = path.join(os.homedir(), ".config", "seo-gbp-oauth.json");
+export const gbpOAuthPath = (cfg) => process.env.GBP_OAUTH || cfg?.credentials?.gbpOAuth || (fs.existsSync(GBP_OAUTH_DEFAULT) ? GBP_OAUTH_DEFAULT : "");
 const GBP_SETUP = `One-time: get Business Profile API access approved (${GBP_PREREQS}), create an OAuth "Desktop app" client, then run
   node scripts/gbp-auth.mjs --client path/to/client_secret.json
 and set GBP_OAUTH to the file it writes (or credentials.gbpOAuth in .seo/config.json).`;
@@ -258,7 +261,7 @@ export function gbpMonths(months, todayIso) {
   const at = (back) => { const t = y * 12 + (m - 1) - back; return { year: Math.floor(t / 12), month: (t % 12) + 1 }; };
   return { start: at(months), end: at(1) };
 }
-const GBP_APIS ={ mybusinessaccountmanagement: "My Business Account Management API", mybusinessbusinessinformation: "My Business Business Information API", businessprofileperformance: "Business Profile Performance API", mybusiness: "Google My Business API" };
+const GBP_APIS = { mybusinessaccountmanagement: "My Business Account Management API", mybusinessbusinessinformation: "My Business Business Information API", businessprofileperformance: "Business Profile Performance API", mybusiness: "Google My Business API" };
 /** API error → { message, code }: quota 0 (access not approved yet) and disabled APIs are setup problems (exit 2). */
 export function gbpError(err, url = "") {
   const api = GBP_APIS[(url.match(/^https:\/\/([a-z]+)\.googleapis\.com/) || [])[1]] || "the Business Profile APIs";
@@ -277,6 +280,28 @@ export async function gbpFetch(cfg, url) {
   if (j.error) { const e = gbpError(j.error, url); throw new SourceError(e.message, e.code); }
   return j;
 }
+async function gbpPages(cfg, url, key, max = 20) {
+  const all = [];
+  let token = "";
+  for (let i = 0; i < max; i++) {
+    const j = await gbpFetch(cfg, url + (token ? `&pageToken=${encodeURIComponent(token)}` : ""));
+    all.push(...(j[key] || []));
+    if (!(token = j.nextPageToken)) break;
+  }
+  return all;
+}
+/** Every location the authorised Google account manages, with its account: [{name, title, websiteUri, account, accountName, ...}]. */
+export async function gbpLocations(cfg) {
+  const accounts = await gbpPages(cfg, "https://mybusinessaccountmanagement.googleapis.com/v1/accounts?pageSize=20", "accounts");
+  const rows = [];
+  for (const a of accounts) for (const l of await gbpPages(cfg, `https://mybusinessbusinessinformation.googleapis.com/v1/${a.name}/locations?readMask=name,title,storefrontAddress,websiteUri&pageSize=100`, "locations")) rows.push({ ...l, account: a.name, accountName: a.accountName });
+  return { accounts, rows };
+}
+/** Locations whose website is on the site's host (www ignored). */
+export const gbpMatches = (rows, site) => {
+  const h = (u) => { try { return new URL(u).host.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
+  return h(site) ? rows.filter((r) => h(r.websiteUri || "") === h(site)) : [];
+};
 /** fetchMultiDailyMetricsTimeSeries response → { METRIC: [{date, value}] }. Zero values are omitted by the API. */
 export function gbpSeries(resp) {
   const out = {};

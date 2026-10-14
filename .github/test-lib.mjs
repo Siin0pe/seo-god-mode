@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { unmangleMsys, msysRoots, parseArgs, parseRobots, rootAllowed, robotsMatch, onHost, hostPattern, regDomainOf, urlKey, signature, period, previousWindow, ctrCurve, expectedCtr, DEFAULT_CTR, delta, signed, gateCompare, pruneAction, contentWords, shingles, jaccard, cwvTrend, sitemapIssues, crawlerOf, parseLogLine, gbpSeries, gbpTotals, gbpKeywordValue, gbpReviewStats, gbpDateParams, gbpMonths, gbpError } from "../plugins/seo-god-mode/skills/seo/scripts/lib.mjs";
+import { unmangleMsys, msysRoots, parseArgs, parseRobots, rootAllowed, robotsMatch, onHost, hostPattern, regDomainOf, urlKey, signature, period, previousWindow, ctrCurve, expectedCtr, DEFAULT_CTR, delta, signed, gateCompare, pruneAction, contentWords, shingles, jaccard, cwvTrend, sitemapIssues, crawlerOf, parseLogLine, gbpSeries, gbpTotals, gbpKeywordValue, gbpReviewStats, gbpMatches, gbpDateParams, gbpMonths, gbpError } from "../plugins/seo-god-mode/skills/seo/scripts/lib.mjs";
 
 const scripts = path.join(path.dirname(fileURLToPath(import.meta.url)), "../plugins/seo-god-mode/skills/seo/scripts");
 
@@ -161,6 +161,9 @@ assert.deepEqual(rs.dist, { 1: 1, 2: 0, 3: 0, 4: 0, 5: 2 });
 assert.equal(rs.replied, 0.25);
 assert.deepEqual(rs.unanswered.map((r) => r.stars), [5, 1, null]);
 assert.equal(gbpReviewStats([]).replied, null);
+const locs = [{ name: "locations/1", websiteUri: "https://www.example.com/" }, { name: "locations/2", websiteUri: "https://other.com" }, { name: "locations/3" }];
+assert.deepEqual(gbpMatches(locs, "https://example.com").map((r) => r.name), ["locations/1"]);
+assert.deepEqual(gbpMatches(locs, ""), []);
 // Access not approved yet (quota 0) and a disabled API are setup problems (exit 2) with the fix in the message.
 const perfUrl = "https://businessprofileperformance.googleapis.com/v1/locations/1:fetchMultiDailyMetricsTimeSeries";
 const q0 = gbpError({ code: 429, status: "RESOURCE_EXHAUSTED", message: "Quota exceeded for quota metric 'Requests' ... limit '0'" }, perfUrl);

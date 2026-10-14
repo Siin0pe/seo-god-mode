@@ -5,12 +5,11 @@
 //   --out     where to write {client_id, client_secret, refresh_token} (mode 600; keep it outside the repo)
 // Sign in with the Google account that owns or manages the profile. Then set GBP_OAUTH=<out>. Times out after 5 minutes.
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
-import { parseArgs, die, apiJson } from "./lib.mjs";
+import { parseArgs, die, apiJson, GBP_OAUTH_DEFAULT } from "./lib.mjs";
 
 const args = parseArgs();
 if (!args.client || args.client === true) die("Usage: node gbp-auth.mjs --client path/to/client_secret.json [--out file]");
@@ -19,7 +18,7 @@ const raw = JSON.parse(fs.readFileSync(args.client, "utf8"));
 // A "Web application" client only accepts its registered redirect URIs, never a random loopback port.
 if (!raw.installed) die(raw.web ? 'This is a "Web application" client. Create an OAuth client of type "Desktop app" and download its JSON.' : 'Not a Google OAuth client file (expected {"installed": {...}}).');
 const { client_id, client_secret } = raw.installed;
-const out = args.out && args.out !== true ? args.out : path.join(os.homedir(), ".config", "seo-gbp-oauth.json");
+const out = args.out && args.out !== true ? args.out : GBP_OAUTH_DEFAULT;
 
 const verifier = crypto.randomBytes(48).toString("base64url");
 const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");

@@ -4,10 +4,12 @@ All notable changes to SEO God Mode are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-14
+
 ### Added
 
 - **Crawler visits** (`crawlers.mjs`): requests per search and AI crawler (Googlebot, bingbot, Applebot, OAI-SearchBot, ChatGPT-User, Claude-SearchBot, Claude-User, PerplexityBot, Perplexity-User, GPTBot, ClaudeBot, CCBot, meta-externalagent, Bytespider), status split, top paths, set against robots.txt (crawlers that ignore a Disallow, search crawlers hitting errors), and with `--sitemap` the sitemap pages Googlebot did not fetch. Sources: Cloudflare GraphQL Analytics (30 days, any plan; `CLOUDFLARE_API_TOKEN` + config `cloudflare.zoneId`) or log files (Vercel Log Drain JSON, JSON logs, combined access logs, `.gz`). `setup.mjs` detects the host from the home page: behind Cloudflare it finds the zone once `CLOUDFLARE_API_TOKEN` is set, elsewhere `--logs <file or folder>` saves where the logs are; optional steps are listed apart from the blocking to-dos. `doctor` checks the access.
-- Google Business Profile (optional source): `gbp.mjs locations|performance|keywords|reviews` gives Search vs Maps and mobile vs desktop impressions, calls, website clicks, direction requests and bookings against the previous period (`--daily` for the day-by-day table), the monthly searches that showed the profile (Google's "<N" thresholds kept as such), and reviews (average, star mix, share replied, latest unanswered). `gbp-auth.mjs` does the one-time OAuth consent (Desktop client, loopback redirect, PKCE) and stores the refresh token outside the repo. Unapproved API access (quota 0) and disabled APIs get a message with the fix. `doctor` shows the connected location; `local` uses the data when present; setup keeps the `gbp` config field.
+- **Google Business Profile** (optional source, set up by `setup.mjs --gbp-client <client_secret.json>`, which runs the one-time consent and picks the profile whose website is the site): `gbp.mjs locations|performance|keywords|reviews` gives Search vs Maps and mobile vs desktop impressions, calls, website clicks, direction requests and bookings against the previous period (`--daily` for the day-by-day table), the monthly searches that showed the profile (Google's "<N" thresholds kept as such), and reviews (average, star mix, share replied, latest unanswered). `gbp-auth.mjs` does the one-time OAuth consent (Desktop client, loopback redirect, PKCE) and stores the refresh token outside the repo. Unapproved API access (quota 0) and disabled APIs get a message with the fix. `doctor` shows the connected location; `local` uses the data when present; setup keeps the `gbp` config field.
 
 ## [1.2.0] - 2026-10-14
 

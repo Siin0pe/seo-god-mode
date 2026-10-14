@@ -101,7 +101,7 @@ plugins/seo-god-mode/
 ├── commands/                  /seo-god-mode:setup, /seo-god-mode:schedule
 └── skills/seo/
     ├── SKILL.md               how Claude runs the job: commands, rules, judgment
-    ├── scripts/               23 Node scripts, zero dependencies, markdown or --json output
+    ├── scripts/               24 Node scripts, zero dependencies, markdown or --json output
     └── references/            playbook, Google spam policies with links, GEO research, setup
 ```
 
