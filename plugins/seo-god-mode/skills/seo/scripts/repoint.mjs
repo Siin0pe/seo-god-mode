@@ -14,7 +14,7 @@ for (const r of rows) byPage.set(r.page, [...(byPage.get(r.page) || []), r]);
 const pages = [...byPage.entries()].map(([page, qs]) => ({ page, qs: qs.sort((a, b) => b.impressions - a.impressions), impr: qs.reduce((s, q) => s + q.impressions, 0) })).filter((p) => p.impr >= minImpr).sort((a, b) => b.impr - a.impr).slice(0, Number(args.limit || 40));
 
 const STOP = new Set("a an the of for to in on at by with and or is are what how why does do your you my vs".split(" "));
-const toks = (s) => s.toLowerCase().replace(/(\p{L})[\s-]+(\d)/gu, "$1$2").normalize("NFKD").replace(/[^\p{L}\p{N} ]+/gu, " ").split(/\s+/).filter((t) => t && !STOP.has(t));
+const toks = (s) => s.toLowerCase().replace(/(\p{L})[\s-]+(\d)/gu, "$1$2").normalize("NFKD").replace(/\p{M}/gu, "").replace(/[^\p{L}\p{N} ]+/gu, " ").split(/\s+/).filter((t) => t && !STOP.has(t));
 const coverage = (q, text) => { const t = new Set(toks(text)); const qt = toks(q); return qt.length ? qt.filter((x) => t.has(x)).length / qt.length : 1; };
 
 const results = await pool(pages, 4, async (p) => {

@@ -8,14 +8,14 @@
 //   Without queries: config "money" keywords + the top non-brand Search Console queries (--top, by impressions).
 //   Results are cached per query and day in .seo/cache (re-runs the same day cost nothing; --fresh to refetch).
 import fs from "node:fs";
-import { parseArgs, loadConfig, dataforseo, gsc, gscObjects, period, queryClass, cachePath, today, table, short, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, dataforseo, gsc, gscObjects, period, queryClass, cachePath, today, regDomainOf, table, short, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
 const location_code = Number(args.location || cfg.market?.location || 2840);
 const language_code = args.lang || cfg.market?.language || "en";
-const host = cfg.hostFilter || new URL(cfg.site).host;
-const regDomain = host.split(".").slice(-2).join(".");
+const host = new URL(cfg.site).host.replace(/^www\./, "");
+const regDomain = regDomainOf(host);
 
 let queries = args._.length ? args._ : [...(cfg.money || [])];
 if (!args._.length) {

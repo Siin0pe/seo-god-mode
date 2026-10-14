@@ -12,14 +12,31 @@ import { parseArgs, table, emit } from "./lib.mjs";
 const args = parseArgs();
 if (!args._[0]) { console.error("usage: rankmap.mjs <yours.csv> [--vs leader.csv,...]"); process.exit(1); }
 
+// Splits one CSV line, honouring quotes ("Main St, North" stays one field, "" is a literal quote).
+function cells(line, sep) {
+  const out = [];
+  let cur = "", q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) { if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === sep) { out.push(cur.trim()); cur = ""; }
+    else cur += c;
+  }
+  out.push(cur.trim());
+  return out;
+}
 function load(file) {
-  const lines = fs.readFileSync(file, "utf8").split(/\r?\n/).filter((l) => l.trim());
+  const lines = fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) { console.error(`${file}: no data rows.`); process.exit(1); }
   const sep = lines[0].includes(";") && !lines[0].includes(",") ? ";" : ",";
-  const head = lines[0].split(sep).map((h) => h.trim().toLowerCase().replace(/"/g, ""));
+  const head = cells(lines[0], sep).map((h) => h.toLowerCase());
   const col = (...names) => head.findIndex((h) => names.some((n) => h === n || h.startsWith(n)));
   const ci = { point: col("point", "id", "name"), lat: col("latitude", "lat"), lng: col("longitude", "lng", "lon"), pos: col("position", "rank", "pos") };
   if (ci.lat < 0 || ci.lng < 0 || ci.pos < 0) { console.error(`${file}: need latitude, longitude and position columns (found: ${head.join(", ")})`); process.exit(1); }
-  return lines.slice(1).map((l, i) => { const c = l.split(sep).map((x) => x.trim().replace(/"/g, "")); const p = Number(c[ci.pos]); return { point: ci.point >= 0 ? c[ci.point] : String(i + 1), lat: Number(c[ci.lat]), lng: Number(c[ci.lng]), pos: p >= 1 && p <= 20 ? p : null }; }).filter((r) => !Number.isNaN(r.lat) && !Number.isNaN(r.lng));
+  const rows = lines.slice(1).map((l, i) => { const c = cells(l, sep); const p = Number(c[ci.pos]); return { point: ci.point >= 0 ? c[ci.point] : String(i + 1), lat: Number(c[ci.lat]), lng: Number(c[ci.lng]), pos: p >= 1 && p <= 20 ? p : null }; }).filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
+  if (!rows.length) { console.error(`${file}: no row with a valid latitude and longitude.`); process.exit(1); }
+  return rows;
 }
 const top3 = (pts) => pts.filter((p) => p.pos && p.pos <= 3).length / (pts.length || 1);
 const pct = (x) => Math.round(x * 100) + "%";

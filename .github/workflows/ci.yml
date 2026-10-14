@@ -32,4 +32,4 @@ jobs:
       - name: Zero dependencies
         run: |
           test ! -e package.json
-          if grep -rhE '^import .* from "' --include=*.mjs plugins/ | grep -vE 'from "(node:|\./)'; then echo "external import found"; exit 1; fi
+          if grep -rhoE "(from|import)[[:space:]]*\(?[[:space:]]*['\"][^'\"[:space:]]+['\"]" --include=*.mjs plugins/ | grep -vE "['\"](node:|\./)"; then echo "external import found"; exit 1; fi

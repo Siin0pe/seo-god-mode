@@ -1,6 +1,7 @@
 // One-shot setup: finds the Google service account key, discovers the Search Console property and the GA4
 // property that cover the site, the sitemap, the brand and the main market, then writes .seo/ (config.json,
-// standards.md, log.md, .gitignore) and runs doctor. Safe to re-run: it only fills fields that are still empty.
+// standards.md, log.md, .gitignore) and runs doctor. Safe to re-run: it only fills fields that are still empty,
+// except those passed explicitly (--gsc, --ga4, --sitemap, --brand, --sa), which replace the saved value.
 // Usage: node setup.mjs --site https://example.com [--sa path/to/key.json] [--gsc sc-domain:example.com]
 //        [--ga4 123456] [--sitemap url] [--brand "acme|akme"] [--no-doctor]
 // Exit codes: 0 ready, 3 ready with something left for the owner to do (printed under "To do").
@@ -9,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { parseArgs, googleToken, fetchText, addDays, lastFinalDay } from "./lib.mjs";
+import { parseArgs, googleToken, apiJson, fetchText, addDays, lastFinalDay, regDomainOf, hostPattern } from "./lib.mjs";
 
 const a = parseArgs();
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -24,9 +25,9 @@ const siteArg = a.site || prev.site;
 if (!siteArg || siteArg === true) { console.error("Usage: node setup.mjs --site https://example.com  (the canonical origin of the site)"); process.exit(1); }
 const site = String(siteArg).replace(/\/$/, "");
 const host = new URL(site).host;
-const labels = host.replace(/^www\./, "").split(".");
 // example.co.uk → example.co.uk, blog.example.com → example.com
-const regDomain = labels.length > 2 && labels.at(-1).length === 2 && labels.at(-2).length <= 3 ? labels.slice(-3).join(".") : labels.slice(-2).join(".");
+const regDomain = regDomainOf(host);
+const sameOrSub = (h, d) => h === d || h.endsWith("." + d);
 const brandWord = regDomain.split(".")[0];
 console.log(`Setting up ${site}\n`);
 
@@ -60,7 +61,7 @@ else {
 const cfg = { credentials: { serviceAccountKey: keyPath } };
 const api = async (url, scope, body) => {
   const t = await googleToken(cfg, [scope]);
-  return (await fetch(url, { method: body ? "POST" : "GET", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) })).json();
+  return apiJson(url, { method: body ? "POST" : "GET", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
 };
 const GSC = "https://www.googleapis.com/auth/webmasters.readonly";
 const GA = "https://www.googleapis.com/auth/analytics.readonly";
@@ -71,13 +72,13 @@ let topQueries = [], topPages = [], topCountry = "";
 if (keyPath) {
   const r = await api("https://www.googleapis.com/webmasters/v3/sites", GSC);
   const sites = (r.siteEntry || []).filter((s) => s.permissionLevel !== "siteUnverifiedUser").map((s) => s.siteUrl);
-  const covers = (p) => p === `sc-domain:${regDomain}` || (p.startsWith("sc-domain:") && host.endsWith(p.slice(10))) || site.startsWith(p.replace(/\/$/, ""));
+  const covers = (p) => (p.startsWith("sc-domain:") ? sameOrSub(host, p.slice(10)) : (site + "/").startsWith(p.replace(/\/?$/, "/")));
   if (!gscProperty) gscProperty = sites.find((p) => p.startsWith("sc-domain:") && covers(p)) || sites.find(covers) || "";
   if (gscProperty && sites.includes(gscProperty)) {
     say(true, "Search Console", gscProperty);
     const q = (dims, end = lastFinalDay()) => api(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(gscProperty)}/searchAnalytics/query`, GSC, {
       startDate: addDays(end, -27), endDate: end, dimensions: dims, rowLimit: 50, dataState: "all",
-      ...(gscProperty.startsWith("sc-domain:") ? { dimensionFilterGroups: [{ filters: [{ dimension: "page", operator: "contains", expression: host }] }] } : {}),
+      ...(gscProperty.startsWith("sc-domain:") ? { dimensionFilterGroups: [{ filters: [{ dimension: "page", operator: "includingRegex", expression: hostPattern(host) }] }] } : {}),
     });
     let [qs, ps, cs] = await Promise.all([q(["query"]), q(["page"]), q(["country"])]);
     // Young sites have nothing in the final-data window yet: fall back to fresh, partial data.
@@ -108,7 +109,7 @@ if (keyPath && !ga4Property) {
         const u = st.webStreamData?.defaultUri; if (!u) continue;
         const h = new URL(u.startsWith("http") ? u : "https://" + u).host;
         if (h === host) match ??= { id, h };
-        else if (h.endsWith(regDomain)) fallback ??= { id, h };
+        else if (sameOrSub(h, regDomain)) fallback ??= { id, h };
       }
     }
     const pick = match || fallback;
@@ -140,16 +141,18 @@ const market = prev.market?.location ? prev.market : mk ? { location: mk[0], lan
 
 // ---------- Write ----------
 const fill = (v, d) => (v === undefined || v === "" || v === null || (Array.isArray(v) && !v.length) ? d : v);
+// An option passed on this run wins over the saved config; otherwise saved values are kept.
+const given = (k) => a[k] !== undefined && a[k] !== true;
 const pathOf = (u) => { try { const x = new URL(u); return x.host === host ? x.pathname : null; } catch { return null; } };
 const pagesByClicks = topPages.map((p) => pathOf(p.page)).filter(Boolean);
 const config = {
   site,
-  gscProperty: fill(prev.gscProperty, gscProperty),
+  gscProperty: given("gsc") ? a.gsc : fill(prev.gscProperty, gscProperty),
   hostFilter: fill(prev.hostFilter, host),
-  ga4Property: fill(prev.ga4Property, ga4Property),
+  ga4Property: given("ga4") ? String(a.ga4) : fill(prev.ga4Property, ga4Property),
   ga4Hostname: fill(prev.ga4Hostname, ga4Hostname),
-  sitemap: fill(prev.sitemap, sitemap),
-  brand: fill(prev.brand, a.brand && a.brand !== true ? a.brand : brandWord),
+  sitemap: given("sitemap") ? a.sitemap : fill(prev.sitemap, sitemap),
+  brand: given("brand") ? a.brand : fill(prev.brand, brandWord),
   brandName: fill(prev.brandName, ""),
   classes: prev.classes || {},
   targets: prev.targets || [],
@@ -159,7 +162,7 @@ const config = {
   cwvUrls: fill(prev.cwvUrls, [...new Set([site + "/", ...pagesByClicks.slice(0, 2).map((p) => site + p)])]),
   keyEvents: prev.keyEvents || [],
   market,
-  credentials: { ...(prev.credentials || {}), serviceAccountKey: fill(prev.credentials?.serviceAccountKey, keyPath) },
+  credentials: { ...(prev.credentials || {}), serviceAccountKey: given("sa") && keyPath ? keyPath : fill(prev.credentials?.serviceAccountKey, keyPath) },
   ...(prev.indexNowKey ? { indexNowKey: prev.indexNowKey } : {}),
   tracker: prev.tracker ?? null,
 };

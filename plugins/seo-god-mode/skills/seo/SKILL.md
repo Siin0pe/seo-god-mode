@@ -17,14 +17,15 @@ Reply in the user's language. Scripts and reports are in English and that's fine
 2. Run `node <skill>/scripts/doctor.mjs`. It tells you which sources are live. Mention gaps once, briefly, then work with what is connected.
 3. Read `.seo/standards.md` (the site's rules, grown from the owner's past rejections) and the last entries of `.seo/log.md` (what changed recently and when). A page changed in the last 60 days is still settling: don't judge it, don't change it again without a strong reason.
 
-`<skill>` is this skill's directory. All scripts are Node 18+, zero dependencies, run from anywhere inside the project, print markdown, and accept `--json`, `--out <file>`, `--host <hostname|all>` (another host on the same domain property) and `--days/--start/--end`.
+`<skill>` is this skill's directory. All scripts are Node 18+, zero dependencies, run from anywhere inside the project and answer `--help`. The analysis scripts print markdown and accept `--json` and `--out <file>`; those reading Search Console also take `--host <hostname|all>` (another host on the same domain property) and `--days/--start/--end`.
 
 ## Commands
 
-The user may type `/seo <command>` or just ask. Map the request to one or more of these.
+The user may type `/seo-god-mode:seo <command>` or just ask. Map the request to one or more of these.
 
 | Command | What it answers | Run |
 |---|---|---|
+| `setup` | First connection: key, Search Console and GA4 properties, sitemap, brand, market | `scripts/setup.mjs --site <url>` (or the `/seo-god-mode:setup` command) |
 | `doctor` | What is connected | `scripts/doctor.mjs` |
 | `weekly` | The Monday review: what moved, why, 3 actions | `scripts/weekly.mjs`, then write the reading (see below) |
 | `drop` | "Traffic is down, why?" demand vs rank vs CTR, per segment | `scripts/drop.mjs [--vs weeks:4\|year]` |

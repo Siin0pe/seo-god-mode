@@ -1,7 +1,7 @@
 // Checks every data source the skill can use and prints what is connected, what is missing and how to fix it.
 // Usage: node doctor.mjs [--config path]
 import fs from "node:fs";
-import { loadConfig, parseArgs, serviceAccountKeyPath, googleToken, pagespeedKey, dataforseoAuth, fetchText, lastFinalDay, addDays } from "./lib.mjs";
+import { loadConfig, parseArgs, serviceAccountKeyPath, googleToken, apiJson, pagespeedKey, dataforseoAuth, fetchText, lastFinalDay, addDays } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
@@ -16,13 +16,13 @@ else line(false, "Service account key", "not found: set SEO_SA_KEY or credential
 async function tryGsc() {
   if (!cfg.gscProperty) return line(false, "Search Console", 'no "gscProperty" in config');
   const t = await googleToken(cfg, ["https://www.googleapis.com/auth/webmasters.readonly"]);
-  const r = await (await fetch(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(cfg.gscProperty)}/searchAnalytics/query`, { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ startDate: addDays(lastFinalDay(), -6), endDate: lastFinalDay(), dimensions: ["date"] }) })).json();
+  const r = await apiJson(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(cfg.gscProperty)}/searchAnalytics/query`, { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ startDate: addDays(lastFinalDay(), -6), endDate: lastFinalDay(), dimensions: ["date"] }) });
   if (r.error) return line(false, "Search Console", `${cfg.gscProperty}: ${r.error.message} (add ${email} as a user on the property)`);
   const clicks = (r.rows || []).reduce((s, x) => s + x.clicks, 0);
   line(true, "Search Console", `${cfg.gscProperty}, ${clicks} clicks over the last 7 final days (whole property)`);
   if (cfg.gscProperty.startsWith("sc-domain:")) {
     // A domain property mixes every host: show the split so nobody analyses the wrong one by default.
-    const pages = await (await fetch(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(cfg.gscProperty)}/searchAnalytics/query`, { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ startDate: addDays(lastFinalDay(), -27), endDate: lastFinalDay(), dimensions: ["page"], rowLimit: 25000, dataState: "all" }) })).json();
+    const pages = await apiJson(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(cfg.gscProperty)}/searchAnalytics/query`, { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ startDate: addDays(lastFinalDay(), -27), endDate: lastFinalDay(), dimensions: ["page"], rowLimit: 25000, dataState: "all" }) });
     const hosts = new Map();
     for (const r of pages.rows || []) { const h = new URL(r.keys[0]).host; const v = hosts.get(h) || { c: 0, i: 0 }; v.c += r.clicks; v.i += r.impressions; hosts.set(h, v); }
     const mine = hosts.get(cfg.hostFilter) || { c: 0, i: 0 };
@@ -30,13 +30,13 @@ async function tryGsc() {
     const others = [...hosts].filter(([h]) => h !== cfg.hostFilter).sort((a, b) => b[1].c - a[1].c);
     if (others.length) console.log(`     other hosts on this property (use --host <name> to analyse them): ${others.map(([h, v]) => `${h} ${v.c} clicks`).join(", ")}`);
   }
-  const ins = await (await fetch("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ inspectionUrl: cfg.site + "/", siteUrl: cfg.gscProperty }) })).json();
+  const ins = await apiJson("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ inspectionUrl: cfg.site + "/", siteUrl: cfg.gscProperty }) });
   line(!ins.error, "URL Inspection API", ins.error ? ins.error.message : `home: ${ins.inspectionResult?.indexStatusResult?.coverageState} (quota 2,000/day/property)`);
 }
 async function tryGa4() {
   if (!cfg.ga4Property) return line(null, "GA4", 'not configured (optional): "ga4Property"');
   const t = await googleToken(cfg, ["https://www.googleapis.com/auth/analytics.readonly"]);
-  const r = await (await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${cfg.ga4Property}:runReport`, { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ dateRanges: [{ startDate: "7daysAgo", endDate: "yesterday" }], metrics: [{ name: "activeUsers" }], ...(cfg.ga4Hostname ? { dimensionFilter: { filter: { fieldName: "hostName", stringFilter: { value: cfg.ga4Hostname } } } } : {}) }) })).json();
+  const r = await apiJson(`https://analyticsdata.googleapis.com/v1beta/properties/${cfg.ga4Property}:runReport`, { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" }, body: JSON.stringify({ dateRanges: [{ startDate: "7daysAgo", endDate: "yesterday" }], metrics: [{ name: "activeUsers" }], ...(cfg.ga4Hostname ? { dimensionFilter: { filter: { fieldName: "hostName", stringFilter: { value: cfg.ga4Hostname } } } } : {}) }) });
   if (r.error) return line(false, "GA4", `${cfg.ga4Property}: ${r.error.message} (add ${email} as Viewer)`);
   line(true, "GA4", `${cfg.ga4Property}${cfg.ga4Hostname ? " host " + cfg.ga4Hostname : ""}: ${r.rows?.[0]?.metricValues?.[0]?.value ?? 0} users over 7 days`);
 }
@@ -57,5 +57,6 @@ async function tryOptional() {
   if (ik) { const f = await fetchText(`${cfg.site}/${ik}.txt`); line(f.status === 200 && f.text.trim() === ik, "IndexNow", f.status === 200 ? "key file served" : `key file ${cfg.site}/${ik}.txt → ${f.status}`); }
   else line(null, "IndexNow", "not configured (optional): INDEXNOW_KEY + key file at site root");
 }
-for (const f of [tryGsc, tryGa4, tryPsi, trySite, tryOptional]) { try { await f(); } catch (e) { line(false, f.name, String(e)); } }
+// One failing source (no key, API error) must not hide the state of the others.
+for (const [name, f] of [["Search Console", tryGsc], ["GA4", tryGa4], ["PageSpeed / CrUX", tryPsi], ["Site", trySite], ["Optional sources", tryOptional]]) { try { await f(); } catch (e) { line(false, name, String(e.message || e).split("\n")[0]); } }
 console.log("\nTracker:", cfg.tracker ? JSON.stringify(cfg.tracker) : "none configured, findings go to .seo/log.md");
