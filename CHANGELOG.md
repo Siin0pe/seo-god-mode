@@ -4,6 +4,13 @@ All notable changes to SEO God Mode are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-14
+
+### Added
+
+- **CrUX History API**: `cwv.mjs --history [--weeks 40]` shows the weekly CrUX p75 (LCP, INP, CLS, TTFB) for the origin and each URL, the values 4 and 12 weeks earlier, and the last week a metric crossed its "good" threshold, so a regression has a date to set against the change log and `drop`. `weekly` adds the origin trend line; `doctor` checks the API. Needs the Chrome UX Report API enabled on the key (`CRUX_API_KEY`, or the PageSpeed key).
+- **Search Console sitemaps**: `doctor` and `index` show which sitemaps Google knows, when it last read them, their errors and warnings, and flag a configured sitemap that is not submitted or has not been read for 14+ days. Same service account, read-only.
+
 ## [1.1.3] - 2026-10-14
 
 ### Fixed

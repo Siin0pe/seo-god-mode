@@ -3,7 +3,7 @@
 // why, and a ranked list of URLs to request manually in the Search Console UI (~10/day quota there).
 // Usage: node index-status.mjs [--limit 300] [--fresh] [--only /path-prefix] [--json]
 import fs from "node:fs";
-import { parseArgs, loadConfig, sitemapUrls, requireSitemap, inspectUrl, gsc, gscObjects, period, cachePath, today, pool, table, fmt, short, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, sitemapUrls, requireSitemap, gscSitemaps, sitemapIssues, inspectUrl, gsc, gscObjects, period, cachePath, today, pool, table, fmt, short, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
@@ -35,4 +35,11 @@ let md = `## Index coverage — ${today()}\n\n${indexed.length}/${res.length} in
 md += notIdx.length ? table(["#", "page", "coverage", "last crawl", "Google canonical ≠ declared", "impr 28d"], notIdx.map((r, i) => [i + 1, short(r.url, cfg), r.coverage || r.error, r.lastCrawl?.slice(0, 10) || "never", r.canonicalGoogle && r.canonicalUser && r.canonicalGoogle !== r.canonicalUser ? short(r.canonicalGoogle, cfg) : "", fmt(impr.get(r.url) || 0)])) : "_Everything in the sitemap is indexed._";
 const canonIssues = indexed.filter((r) => r.canonicalGoogle && r.canonicalUser && r.canonicalGoogle !== r.canonicalUser);
 if (canonIssues.length) md += `\n\n### Indexed under a different canonical than declared\n\n` + table(["page", "declared", "Google chose"], canonIssues.map((r) => [short(r.url, cfg), short(r.canonicalUser, cfg), short(r.canonicalGoogle, cfg)]));
-emit(args, md, { date: today(), results: res });
+// Google's side of the sitemaps: a sitemap Google stopped reading explains pages that never get discovered.
+const sm = await gscSitemaps(cfg);
+if (sm.error) md += `\n\n### Sitemaps in Search Console\n\nUnavailable: ${sm.error}`;
+else {
+  const issues = sitemapIssues(sm.sitemaps, cfg.sitemap);
+  md += `\n\n### Sitemaps in Search Console\n\n` + (sm.sitemaps.length ? table(["sitemap", "last read by Google", "last submitted", "URLs submitted", "errors", "warnings"], sm.sitemaps.map((s) => [s.path, s.lastDownloaded?.slice(0, 10) || (s.pending ? "pending" : "never"), s.lastSubmitted?.slice(0, 10) || "—", fmt(s.submitted), s.errors, s.warnings])) : "_None submitted._") + (issues.length ? `\n\n${issues.map((i) => "- " + i).join("\n")}` : "");
+}
+emit(args, md, { date: today(), results: res, sitemaps: sm });

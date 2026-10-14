@@ -46,7 +46,7 @@ Talk normally ("why did clicks drop on Tuesday?", "get this page on Google", "wh
 | `twins` | Doorway detector: pattern pages that are a find-and-replace of each other |
 | `serp-mix` | Which queries leave room beyond your site (videos, Reddit, LinkedIn, lists), which subreddits Google ranks on your keywords, which lists miss you |
 | `rankmap` | Local SEO: top-3% from a rank-map export, weakest direction, cheap wins, gap to the leader |
-| `cwv` | Core Web Vitals, field (CrUX) and lab |
+| `cwv` | Core Web Vitals, field (CrUX) and lab, with up to 40 weeks of history |
 | `keywords` | Volumes, ideas, live SERPs with AI Overviews, competitor keywords, gaps, backlinks (DataForSEO) |
 | `suggest` | Free keyword patterns from Google Autocomplete |
 | `geo` | Visibility in ChatGPT, Perplexity, Gemini and AI Overviews: fan-out queries, prospects, citation log |
@@ -81,9 +81,9 @@ Every time you reject a proposal, the reason goes into `.seo/standards.md`. Afte
 
 | Source | What it unlocks | Cost |
 |---|---|---|
-| Google Search Console + URL Inspection | Clicks, impressions, positions, indexing | Free |
+| Google Search Console + URL Inspection | Clicks, impressions, positions, indexing, sitemap health | Free |
 | GA4 | Sessions by channel, conversions | Free |
-| PageSpeed Insights / CrUX | Core Web Vitals | Free (an API key lifts the rate limit) |
+| PageSpeed Insights / CrUX + CrUX History | Core Web Vitals, and their weekly trend | Free (an API key lifts the rate limit; history needs one) |
 | Google Autocomplete | Keyword patterns | Free |
 | DataForSEO *(optional)* | Search volumes, live SERPs, competitors, gaps, backlinks | Pay as you go, ~$50 minimum deposit, fractions of a cent per call |
 | Bing Webmaster + IndexNow *(optional)* | Bing queries, instant indexing on Bing and friends | Free |
