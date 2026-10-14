@@ -25,6 +25,8 @@ jobs:
             [ "$f" = lib.mjs ] && continue
             node "$f" --help > /dev/null || { echo "--help failed: $f"; exit 1; }
           done
+      - name: Library unit checks
+        run: node .github/test-lib.mjs
       - name: Manifests agree on the version
         run: node .github/check-manifests.mjs
       - name: Zero dependencies

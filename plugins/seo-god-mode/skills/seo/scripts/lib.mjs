@@ -22,7 +22,17 @@ export function parseArgs(argv = process.argv.slice(2)) {
     else if (argv[i + 1] && !argv[i + 1].startsWith("--")) out[k] = argv[++i];
     else out[k] = true;
   }
+  if (process.env.MSYSTEM) for (const k of Object.keys(out)) if (typeof out[k] === "string") out[k] = unmangleMsys(out[k], URL_PATH_ARGS.has(k));
   return out;
+}
+// Git Bash (MSYS) rewrites arguments that look like POSIX paths before Node sees them: "/learn/" becomes
+// "C:/Program Files/Git/learn/" and "/a/,/b/" becomes "A:/,/b/". URL paths are what these scripts take, so undo it.
+const URL_PATH_ARGS = new Set(["paths", "only"]);
+export function unmangleMsys(v, urlPathArg = false) {
+  let s = v.replace(/(^|[,\^])[A-Za-z]:\/(?:[^,]*?\/)?Git\//gi, "$1/");
+  // A one-letter first segment is read as a drive ("/a/" → "A:/"). Only safe to undo for URL-path options.
+  if (urlPathArg) s = s.split(",").map((p) => p.replace(/^([A-Za-z]):\//, (_, d) => "/" + d.toLowerCase() + "/")).join(",");
+  return s;
 }
 export const die = (msg, code = 1) => { console.error(msg); process.exit(code); };
 export const missing = (what, how) => die(`MISSING SOURCE: ${what}\n${how}\nSee references/setup.md.`, 2);

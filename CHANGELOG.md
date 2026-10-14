@@ -4,6 +4,13 @@ All notable changes to SEO God Mode are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-14
+
+### Fixed
+
+- Git Bash on Windows rewrote URL-path arguments before Node saw them (`--paths /learn/` became `C:/Program Files/Git/learn/`, `/a/` became `A:/`), so `ship-gate --dist --paths` silently checked zero pages. Arguments are now restored in `lib.mjs` for every script.
+- `ship-gate --dist` exits 2 when it checked no page or when a `--paths` entry matches no built page, instead of looking like a pass. Paths are normalised (`/a`, `a/` and `/a/` are the same).
+
 ## [1.1.0] - 2026-10-13
 
 ### Added
@@ -42,6 +49,7 @@ First public release.
 - Guardrails: read-only by default, owner approval for anything that touches a live page, never deletes pages, buys, emails, submits forms, creates accounts or handles credentials.
 - Per-project memory in `.seo/`: `standards.md` (grows from rejected proposals) and `log.md` (every change with its review date).
 
-[Unreleased]: https://github.com/Siin0pe/seo-god-mode/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Siin0pe/seo-god-mode/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/Siin0pe/seo-god-mode/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Siin0pe/seo-god-mode/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Siin0pe/seo-god-mode/releases/tag/v1.0.0
