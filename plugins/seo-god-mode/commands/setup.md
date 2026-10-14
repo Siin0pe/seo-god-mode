@@ -28,7 +28,7 @@ Exit code 3 means something is left under "To do". Walk the user through each it
 - **No service account key**: the user creates it in Google Cloud (it is their credential: never ask them to paste the key into the chat, only the file path). Then re-run with `--sa <path>`.
 - **Search Console or GA4 not shared**: give them the service account email to add (Search Console: Restricted; GA4: Viewer). Then re-run.
 
-Anything optional (DataForSEO, PageSpeed key, Bing, IndexNow) is mentioned once at the end, not pushed.
+Anything optional (DataForSEO, PageSpeed key, Bing, IndexNow, crawler visits through Cloudflare or log files) is mentioned once at the end, not pushed: the script lists it under "Optional, when you want it" with the exact step for this site's host.
 
 ## 4. Fill what only a human knows
 

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { unmangleMsys, msysRoots, parseArgs, parseRobots, rootAllowed, robotsMatch, onHost, hostPattern, regDomainOf, urlKey, signature, period, previousWindow, ctrCurve, expectedCtr, DEFAULT_CTR, delta, signed, gateCompare, pruneAction, contentWords, shingles, jaccard, cwvTrend, sitemapIssues } from "../plugins/seo-god-mode/skills/seo/scripts/lib.mjs";
+import { unmangleMsys, msysRoots, parseArgs, parseRobots, rootAllowed, robotsMatch, onHost, hostPattern, regDomainOf, urlKey, signature, period, previousWindow, ctrCurve, expectedCtr, DEFAULT_CTR, delta, signed, gateCompare, pruneAction, contentWords, shingles, jaccard, cwvTrend, sitemapIssues, crawlerOf, parseLogLine } from "../plugins/seo-god-mode/skills/seo/scripts/lib.mjs";
 
 const scripts = path.join(path.dirname(fileURLToPath(import.meta.url)), "../plugins/seo-god-mode/skills/seo/scripts");
 
@@ -123,6 +123,17 @@ const si = sitemapIssues(sm, "https://x.test/new.xml", now);
 assert.ok(si.some((i) => i.includes("new.xml is not submitted")));
 assert.ok(si.some((i) => i.includes("old.xml: 2 error")));
 assert.ok(si.some((i) => i.includes("old.xml: last read by Google 43 days ago")));
+
+// Crawler visits: user agents and log formats.
+assert.equal(crawlerOf("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"), "Googlebot");
+assert.equal(crawlerOf("Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"), "bingbot");
+assert.equal(crawlerOf("Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-SearchBot/1.0; +https://www.anthropic.com)"), "Claude-SearchBot");
+assert.equal(crawlerOf("Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)"), "ClaudeBot");
+assert.equal(crawlerOf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"), null);
+assert.deepEqual(parseLogLine('203.0.113.9 - - [10/Oct/2026:13:55:36 +0200] "GET /learn/x?utm=1 HTTP/1.1" 404 512 "-" "Mozilla/5.0 (compatible; GPTBot/1.2)"'), { ua: "Mozilla/5.0 (compatible; GPTBot/1.2)", path: "/learn/x", status: 404, time: "2026-10-10T11:55:36.000Z" });
+const vl = parseLogLine(JSON.stringify({ timestamp: 1791000000000, proxy: { path: "/a/", statusCode: 200, userAgent: ["Mozilla/5.0 (compatible; OAI-SearchBot/1.0)"] } }));
+assert.equal(vl.path, "/a/"); assert.equal(vl.status, 200); assert.equal(crawlerOf(vl.ua), "OAI-SearchBot"); assert.ok(vl.time.startsWith("2026-"));
+assert.equal(parseLogLine("garbage"), null);
 
 // Ship gate, end to end on files.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "seo-gate-"));

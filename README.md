@@ -51,6 +51,7 @@ Talk normally ("why did clicks drop on Tuesday?", "get this page on Google", "wh
 | `suggest` | Free keyword patterns from Google Autocomplete |
 | `geo` | Visibility in ChatGPT, Perplexity, Gemini and AI Overviews: fan-out queries, prospects, citation log |
 | `brief` / `pattern` / `ship` / `outreach` / `local` | Step-by-step playbooks: one page per keyword, page patterns, safe publishing, link prospecting, local SEO |
+| `crawlers` | Which search and AI crawlers actually fetch your pages (Cloudflare or server logs), and the sitemap pages Googlebot skipped |
 | `gsc`, `bing`, `indexnow` | Raw Search Console cuts, Bing data, instant pings after publishing |
 
 ## A real case
@@ -87,6 +88,7 @@ Every time you reject a proposal, the reason goes into `.seo/standards.md`. Afte
 | Google Autocomplete | Keyword patterns | Free |
 | DataForSEO *(optional)* | Search volumes, live SERPs, competitors, gaps, backlinks | Pay as you go, ~$50 minimum deposit, fractions of a cent per call |
 | Bing Webmaster + IndexNow *(optional)* | Bing queries, instant indexing on Bing and friends | Free |
+| Cloudflare analytics or server logs *(optional)* | Which search and AI crawlers fetch the site, what and with which status | Free (Cloudflare, any plan) or your own logs |
 
 Google access goes through a **service account** you create (5 minutes, free). The setup command gives you the exact links and checks each grant. Keys stay on your machine; the config only stores a path to them and is safe to commit.
 
