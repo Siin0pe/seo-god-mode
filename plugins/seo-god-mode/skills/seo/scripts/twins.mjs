@@ -5,13 +5,13 @@
 // Usage: node twins.mjs [--pattern "^/learn/"] [--urls url1,url2,...] [--threshold 0.8] [--warn 0.6] [--max 150]
 //   Without --pattern or --urls, sitemap URLs are grouped by their first path segment.
 // Exit code: 1 if any page is at or above --threshold (doorway risk), 3 if any is above --warn, else 0.
-import { parseArgs, loadConfig, sitemapUrls, fetchText, mainHtml, pool, onHost, table, short, emit } from "./lib.mjs";
+import { parseArgs, loadConfig, sitemapUrls, requireSitemap, fetchText, pool, onHost, contentWords, shingles, jaccard, table, short, emit } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
 const hi = Number(args.threshold || 0.8), lo = Number(args.warn || 0.6), max = Number(args.max || 150);
 
-let urls = args.urls ? String(args.urls).split(",") : (await sitemapUrls(cfg.sitemap)).map((u) => u.loc).filter((u) => onHost(u, cfg.hostFilter));
+let urls = args.urls ? String(args.urls).split(",") : (await sitemapUrls(requireSitemap(cfg))).map((u) => u.loc).filter((u) => onHost(u, cfg.hostFilter));
 const pathOf = (u) => { try { return new URL(u).pathname; } catch { return u; } };
 if (args.pattern) { const re = new RegExp(args.pattern); urls = urls.filter((u) => re.test(pathOf(u))); }
 // Group: explicit list or pattern = one group; otherwise by first path segment, ignoring the segment's own index page.
@@ -26,12 +26,9 @@ for (const [k, v] of groups) if (v.length < 2) groups.delete(k);
 const all = [...groups.values()].flat().slice(0, max);
 if (!all.length) { console.error("No group of 2+ pages to compare. Use --pattern or --urls."); process.exit(0); }
 
-const text = (html) => mainHtml(html).replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "").replace(/[^\p{L}\p{N}\s]+/gu, " ").split(/\s+/).filter(Boolean);
-const shingles = (w) => { const s = new Set(); for (let i = 0; i + 5 <= w.length; i++) s.add(w.slice(i, i + 5).join(" ")); return s; };
 const pages = new Map();
-await pool(all, 4, async (u) => { const r = await fetchText(u); if (r.status === 200) { const w = text(r.text); pages.set(u, { words: w, sh: shingles(w) }); } });
+await pool(all, 4, async (u) => { const r = await fetchText(u); if (r.status === 200) { const w = contentWords(r.text); pages.set(u, { words: w, sh: shingles(w) }); } });
 
-const jacc = (a, b) => { let i = 0; for (const x of a) if (b.has(x)) i++; return i / (a.size + b.size - i || 1); };
 const rows = [];
 for (const [g, list] of groups) {
   const ps = list.filter((u) => pages.has(u));
@@ -39,7 +36,7 @@ for (const [g, list] of groups) {
     const me = pages.get(u);
     let best = { sim: 0, with: "" };
     const others = new Set();
-    for (const v of ps) { if (v === u) continue; const s = jacc(me.sh, pages.get(v).sh); if (s > best.sim) best = { sim: s, with: v }; for (const x of pages.get(v).sh) others.add(x); }
+    for (const v of ps) { if (v === u) continue; const s = jaccard(me.sh, pages.get(v).sh); if (s > best.sim) best = { sim: s, with: v }; for (const x of pages.get(v).sh) others.add(x); }
     const unique = [...me.sh].filter((x) => !others.has(x)).length;
     // A run of new words yields about one new shingle per word: unique shingles ≈ unique words.
     rows.push({ group: g, url: u, words: me.words.length, closest: best.with, similarity: best.sim, uniqueWords: Math.min(unique, me.words.length) });

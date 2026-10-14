@@ -2,7 +2,7 @@
 // canonical), titles/descriptions (missing, duplicate, length), H1, hreflang reciprocity, html lang, JSON-LD
 // validity, thin pages, images without alt, plus robots.txt and sitemap hygiene. Ranked by severity.
 // Usage: node audit.mjs [--limit 500] [--json]
-import { parseArgs, loadConfig, sitemapUrls, fetchText, signature, mainHtml, pool, table, short, emit, parseRobots, rootAllowed, CRAWLERS } from "./lib.mjs";
+import { parseArgs, loadConfig, sitemapUrls, requireSitemap, fetchText, signature, mainHtml, pool, table, short, emit, parseRobots, rootAllowed, CRAWLERS } from "./lib.mjs";
 
 const args = parseArgs();
 const cfg = loadConfig(args);
@@ -20,7 +20,7 @@ else {
   add(3, "/robots.txt", "AI crawler policy (info)", `training blocked: ${blockedTraining.join(", ") || "none"}; retrieval allowed: ${CRAWLERS.aiRetrieval.filter((b) => rootAllowed(groups, b)).join(", ") || "none"}`);
   if (!/^\s*sitemap:/im.test(robots.text)) add(3, "/robots.txt", "no Sitemap: line");
 }
-const entries = (await sitemapUrls(cfg.sitemap)).slice(0, Number(args.limit || 500));
+const entries = (await sitemapUrls(requireSitemap(cfg))).slice(0, Number(args.limit || 500));
 const pages = await pool(entries, 5, async (e) => {
   const r = await fetchText(e.loc);
   return { url: e.loc, lastmod: e.lastmod, status: r.status, finalUrl: r.url, xRobots: r.headers?.["x-robots-tag"] || "", html: r.text, sig: r.status === 200 ? signature(r.text, e.loc) : null };
